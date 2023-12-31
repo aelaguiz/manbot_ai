@@ -11,14 +11,30 @@ import json
 import random
 import logging
 import dotenv
-from ai import ai
+from ai import ai, init_model
 from prompt_toolkit import prompt
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
+import logging.config
+import logging
 
 import time
 
 dotenv.load_dotenv()
+
+# Define the configuration file path based on the environment
+config_path = os.getenv('LOGGING_CONF_PATH')
+
+# Use the configuration file appropriate to the environment
+logging.config.fileConfig(config_path)
+
+from ai.lib import lib_model, lc_logger
+
+
+logger = logging.getLogger(__name__)
+
+
+init_model(os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), temp=os.getenv("OPENAI_TEMPERATURE"))
 
 
 def process_command(user_input, chat_context, initial_messages):

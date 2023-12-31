@@ -1,8 +1,10 @@
 from setuptools import setup, find_packages
 
+from ai import __version__
+
 setup(
     name='ai',  # Change to your library's name
-    version='0.1.3',  # Update the version number for new releases
+    version=__version__,
     author='Amir Elaguizy',  # Replace with your name
     author_email='aelaguiz@gmail.com',  # Replace with your email
     description='AI utility library',  # Provide a short description

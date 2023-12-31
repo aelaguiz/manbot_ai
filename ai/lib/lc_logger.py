@@ -1,6 +1,5 @@
 import logging
 from typing import Any, Optional
-import json
 from uuid import UUID
 
 from typing import Any, Dict, List

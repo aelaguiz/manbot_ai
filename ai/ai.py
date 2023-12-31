@@ -20,27 +20,10 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain.schema import messages_from_dict, messages_to_dict
 from langchain.memory.chat_message_histories.in_memory import ChatMessageHistory
-
-
 import json
-
 import logging
-import logging.config
-import dotenv
-import os
-
-dotenv.load_dotenv()
-
-
-# Define the configuration file path based on the environment
-config_path = os.getenv('LOGGING_CONF_PATH')
-
-# Use the configuration file appropriate to the environment
-logging.config.fileConfig(config_path)
 
 from .lib import lib_model, lc_logger
-
-logger = logging.getLogger(__name__)
 
 class ChatError(Exception):
     """
@@ -153,6 +136,7 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     Raises:
         ChatError: An error occurred during chat processing.
     """
+    logger = logging.getLogger(__name__)
     logger.debug(f"AI: get_chat_reply called with user_input: {user_input}, session_id: {session_id}, chat_id: {chat_id}, chat_context: {chat_context}")
     try:
         llm = lib_model.get_llm()
@@ -227,4 +211,3 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
         import traceback
         traceback.print_exc()
         raise ChatError(f"Failed to process chat: {str(e)}")
-
