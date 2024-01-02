@@ -14,12 +14,20 @@ it's also likely that at the beginning of a chat they there will be some context
 """
 from langchain.prompts import MessagesPlaceholder
 from langchain.chains import LLMChain, ConversationChain
+from operator import itemgetter
+
+from langchain.callbacks.tracers import ConsoleCallbackHandler
 
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string
 from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain.schema import messages_from_dict, messages_to_dict
 from langchain.memory.chat_message_histories.in_memory import ChatMessageHistory
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+
+
 import json
 import logging
 
@@ -51,14 +59,17 @@ You are an expert on modern masculinity and relationships by studying the teachi
 2. You will not provide any personal opinions or ethical considerations outside of the teachings of the aforementioned authors.
 3. You will maintain a direct and concise approach, ensuring that your guidance is in line with the specific teachings of the authors.
 4. You will respect the confidentiality of the inquiries and provide advice that is tailored to the context of the question asked.
-
+5. You will use the provided reference documents written by Robbie Kramer to adapt your advice to incorporate the specific teachings of Robbie Kramer 
 
 Remember, your role is to serve as a knowledgeable resource on modern masculinity and relationships as defined by these specific writers.
 Your advice should reflect the ideologies and strategies they endorse, focusing on the dynamics of power, attraction, and social hierarchy as they pertain to gender relations and personal development.
 
+## Reference materials
+{reference_materials}
+
 ## How to interact with the user
 
-* Emulate the tone and style of Joe Rogan when interacting with the user. Friendly and conversational, frequently offering them little bits of validation, encouragement along with direct but constructive advice & criticism.
+* Emulate the tone and style of Robbie Kramer in when interacting with the user. Friendly and conversational, frequently offering them little bits of validation, encouragement along with direct but constructive advice & criticism.
 * Your interactions should be highly conversational, emulating a natural conversation between a man and his knowledgable male friend.
 * You can ask more than on question at a time but only when they are highly related, and only when it would make a natural flowing conversation.
 * Always make it clear what the user should be telling you next, we never want them to feel anxious because they don't know where to go next.
@@ -115,9 +126,40 @@ Gather some basic information about the relationship
 
 """),
         MessagesPlaceholder(variable_name="history"),
-        HumanMessagePromptTemplate.from_template("{input}"),
+        HumanMessagePromptTemplate.from_template("{input}")
     ]
 )
+
+def format_docs(docs):
+    res = "\n\n".join([_format_doc(d) for d in docs])
+
+    logger = logging.getLogger(__name__)
+    logger.debug(f"Formatted docs: {res}")
+
+    return res
+
+def _format_doc(doc):
+    if doc.metadata['type'] == 'wordpress':
+        return _format_wordpress(doc)
+
+    logger = logging.getLogger(__name__)
+    logger.error(f"Unknown doc type: {doc.metadata['type']}")
+
+def _format_wordpress(doc):
+    return f"""### Wordpress article
+Title: {doc.metadata['title']}
+Author: {doc.metadata['author']}
+URL: {doc.metadata['url']}
+
+Text: \"\"\"
+{doc.page_content}
+\"\"\""""
+
+def make_retrieval_context(obj):
+
+    obj['retrieval_context'] = get_buffer_string(obj['history']) + "\nHuman: " + obj['input']
+
+    return obj
 
 def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
     """
@@ -170,11 +212,11 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
 
 
                 retrieved_chat_history = ChatMessageHistory(messages=messages_from_dict(translated_messages))
-                retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", return_messages=True)
+                retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", output_key="output", return_messages=True)
 
                 memory = retrieved_memory
             else:
-                memory = ConversationBufferMemory(input_key="input", return_messages=True)
+                memory = ConversationBufferMemory(input_key="input", output_key="output", return_messages=True)
 
 
             
@@ -185,24 +227,89 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
             ]
             """
 
-        # Initialize the conversation chain and memory buffer for each call
-        convo = ConversationChain(llm=llm, memory=memory, prompt=chat_template, callbacks=[lmd], verbose=True)
+        vectordb = lib_model.get_vectordb()
+        retriever = vectordb.as_retriever(search_args={"k": 5})
 
-        # Load or update chat context if provided
-        if chat_context:
-            # Load or update the chat context into the convo object
-            # e.g., setting the current state of the conversation
-            pass
+        # docs = vectordb.similarity_search_with_score(user_input, k=10)
+        # for doc, score in docs:
+        #     print(score, doc.page_content)
 
-        # Process the user input and get a response from the model
-        res = convo.predict(input=user_input)
-        print(res)
 
-        reply = res  # Adjust based on actual structure of res
 
-        extracted_messages = convo.memory.chat_memory.messages
+        # return "", None
+
+
+        # # Initialize the conversation chain and memory buffer for each call
+        # convo = ConversationChain(llm=llm, memory=memory, prompt=chat_template, callbacks=[lmd], verbose=True)
+
+        # # Load or update chat context if provided
+        # if chat_context:
+        #     # Load or update the chat context into the convo object
+        #     # e.g., setting the current state of the conversation
+        #     pass
+
+        # # Process the user input and get a response from the model
+        # res = convo.predict(input=user_input, reference_materials=retriever)
+        # print(res)
+
+        # reply = res  # Adjust based on actual structure of res
+
+        # extracted_messages = convo.memory.chat_memory.messages
+        # ingest_to_db = messages_to_dict(extracted_messages)
+        # new_chat_context = json.dumps(ingest_to_db)
+
+        # print(memory)
+        # print(memory.load_memory_variables({"history": "test"}))
+
+        loaded_memory = RunnablePassthrough.assign(
+            history=RunnableLambda(memory.load_memory_variables) | itemgetter("history"),
+        )
+
+
+        # rc = (
+        #     { 
+        #         'user_input': RunnablePassthrough()
+        #      }
+        #     | retriever
+        # )
+
+        # print(rc.invoke({user_input: user_input}))
+
+        chain = (
+            loaded_memory 
+            | {
+                'input': lambda x: x['input'], 
+                'history': lambda x: x["history"],
+             }
+             | make_retrieval_context
+            | {
+                'input': lambda x: x['input'],
+                'history': lambda x: x['history'],
+                'reference_materials': itemgetter("retrieval_context") | retriever | format_docs,
+            }
+            | chat_template
+            | llm
+            | StrOutputParser()
+        )
+        # print(chain)
+
+        reply = chain.invoke({"input": user_input}, config={'callbacks': [lmd]})
+
+        # # extracted_messages = convo.memory.chat_memory.messages
+        # # ingest_to_db = messages_to_dict(extracted_messages)
+        # # new_chat_context = json.dumps(ingest_to_db)
+
+        # # input key outpu tkey ChatMessageHistory
+        # print(memory.outputs)
+
+        memory.save_context({"input": user_input}, {"output": reply})
+
+        extracted_messages = memory.chat_memory.messages
         ingest_to_db = messages_to_dict(extracted_messages)
         new_chat_context = json.dumps(ingest_to_db)
+
+        # print(reply)
+        # print(new_chat_context)
 
 
         return reply, new_chat_context

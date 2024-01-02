@@ -2,13 +2,9 @@
 import os
 import logging
 from dotenv import load_dotenv
-
 # Assuming some document database abstraction is available as model_abstraction
 from .lib_model import get_vectordb
 from langchain_core.documents import Document
-
-# Initialize the document database (vectordb)
-vectordb = get_vectordb()
 
 def add_doc(doc: Document, obj_id: str):
     """
@@ -18,8 +14,9 @@ def add_doc(doc: Document, obj_id: str):
     doc (Document): The langchain Document object to add.
     obj_id (str): The unique identifier for the document.
     """
-    logger = lib_logging.get_logger()
+    logger = logging.getLogger(__name__)
     try:
+        vectordb = get_vectordb()
         text = doc.page_content
         metadata = doc.metadata
         # Using the provided method to add a single document
@@ -35,8 +32,9 @@ def bulk_add_docs(docs: list):
     Parameters:
     docs (list of Document): A list of langchain Document objects to add.
     """
-    logger = lib_logging.get_logger()
+    logger = logging.getLogger(__name__)
     try:
+        vectordb = get_vectordb()
         texts = [doc.page_content for doc in docs]
         metadatas = [doc.metadata for doc in docs]
         # Using the provided method to add multiple documents in bulk

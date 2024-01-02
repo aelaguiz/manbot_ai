@@ -1,22 +1,23 @@
 import logging
 from langchain.embeddings import OpenAIEmbeddings, OllamaEmbeddings
-from langchain.vectorstores import Chroma
 from langchain.chat_models import ChatOpenAI, ChatOllama
 from langchain.globals import set_llm_cache
 from langchain.cache import SQLiteCache
+from langchain.vectorstores.pgvector import PGVector
 import pinecone
-from langchain.vectorstores import Pinecone
 
 _vectordb = None
 _embedding = None
 _pinecone_index = None
 _llm = None
 _embedding = None
+_db = None
 
 
-def init(model_name, api_key, temp=0.5):
+def init(model_name, api_key, db_connection_string, temp=0.5):
     global _llm
     global _embedding
+    global _db
 
     logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ def init(model_name, api_key, temp=0.5):
 
     _llm = ChatOpenAI(model_name=model_name, temperature=temp)
     _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30)
+    _db = initialize_db(db_connection_string)
 
     return _llm
 
@@ -41,20 +43,22 @@ def get_embedding_fn():
     
     return _embedding
 
-# def get_vectordb():
-#     global _vectordb
-#     global _pinecone_index
+def initialize_db(db_connection_string, db_collection_name="docs"):
+    global _db
 
-#     if _vectordb:
-#         return _vectordb
+    if _db:
+        raise Exception("DB already initialized")
 
-#     logging.info(f"Using Pinecone")
-#     pinecone.init(api_key=os.getenv("PINECONE_API_KEY"), environment=os.getenv("PINECONE_ENVIRONMENT"))
-#     pinecone_index = pinecone.Index(index_name=os.getenv("PINECONE_INDEX_NAME"))
+    _db = PGVector(
+        embedding_function=get_embedding_fn(),
+        collection_name=db_collection_name,
+        connection_string=db_connection_string
+    )
 
-#     _vectordb = Pinecone(pinecone_index, get_embedding_fn(), "text")
-
-#     return _vectordb
+    return _db
+    
+def get_vectordb():
+    return _db
 
 def get_llm():
     global _llm

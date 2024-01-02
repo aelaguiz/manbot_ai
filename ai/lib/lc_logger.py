@@ -20,7 +20,6 @@ class LlmDebugHandler(BaseCallbackHandler):
         self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
     ) -> None:
         """Print out the prompts."""
-        print("LLM Start")
         logging.debug(f"LLM Start: {serialized} {prompts}")
         for i, prompt in enumerate(prompts):
             logging.debug(f"  Prompt {i}: {prompt}")
