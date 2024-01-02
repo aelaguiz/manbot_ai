@@ -2,6 +2,7 @@ import logging
 from langchain.embeddings import OpenAIEmbeddings, OllamaEmbeddings
 from langchain.chat_models import ChatOpenAI, ChatOllama
 from langchain.globals import set_llm_cache
+from langchain.indexes import SQLRecordManager, index
 from langchain.cache import SQLiteCache
 from langchain.vectorstores.pgvector import PGVector
 import pinecone
@@ -12,12 +13,14 @@ _pinecone_index = None
 _llm = None
 _embedding = None
 _db = None
+_record_manager = None
 
 
-def init(model_name, api_key, db_connection_string, temp=0.5):
+def init(model_name, api_key, db_connection_string, record_manager_connection_string, temp=0.5):
     global _llm
     global _embedding
     global _db
+    global _record_manager
 
     logger = logging.getLogger(__name__)
 
@@ -27,7 +30,7 @@ def init(model_name, api_key, db_connection_string, temp=0.5):
 
     _llm = ChatOpenAI(model_name=model_name, temperature=temp)
     _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30)
-    _db = initialize_db(db_connection_string)
+    _db = initialize_db(db_connection_string, record_manager_connection_string)
 
     return _llm
 
@@ -43,8 +46,9 @@ def get_embedding_fn():
     
     return _embedding
 
-def initialize_db(db_connection_string, db_collection_name="docs"):
+def initialize_db(db_connection_string, record_manager_connection_string, db_collection_name="docs"):
     global _db
+    global _record_manager
 
     if _db:
         raise Exception("DB already initialized")
@@ -55,7 +59,23 @@ def initialize_db(db_connection_string, db_collection_name="docs"):
         connection_string=db_connection_string
     )
 
+    namespace = f"pgvector/{db_collection_name}"
+    _record_manager = SQLRecordManager(namespace, db_url=record_manager_connection_string)
+
+    _record_manager.create_schema()
+
     return _db
+
+def get_record_manager():
+    global _record_manager
+
+    logger = logging.getLogger(__name__)
+
+    if not _record_manager:
+        logger.error("Record manager not initialized, call initialize_db() first")
+        raise Exception("Record manager not initialized, call initialize_db() first")
+
+    return _record_manager
     
 def get_vectordb():
     return _db

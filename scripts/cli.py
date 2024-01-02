@@ -26,7 +26,11 @@ dotenv.load_dotenv()
 config_path = os.getenv('LOGGING_CONF_PATH')
 
 # Use the configuration file appropriate to the environment
-# logging.config.fileConfig(config_path)
+logging.config.fileConfig(config_path)
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
+logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
 from ai.lib import lib_model, lc_logger
 
@@ -34,9 +38,10 @@ from ai.lib import lib_model, lc_logger
 logger = logging.getLogger(__name__)
 
 CONNECTION_STRING = os.getenv("PGVECTOR_CONNECTION_STRING")
+RECORDMANAGER_CONNECTION_STRING = os.getenv("RECORDMANAGER_CONNECTION_STRING")
 
 
-init(os.getenv("FIREBASE_ADMIN_SDK_JSON"), os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), CONNECTION_STRING, temp=os.getenv("OPENAI_TEMPERATURE"))
+init(os.getenv("FIREBASE_ADMIN_SDK_JSON"), os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), CONNECTION_STRING, RECORDMANAGER_CONNECTION_STRING, temp=os.getenv("OPENAI_TEMPERATURE"))
 
 
 def process_command(user_input, chat_context, initial_messages):
@@ -45,7 +50,7 @@ def process_command(user_input, chat_context, initial_messages):
     reply, new_context = ai.get_chat_reply(user_input, session_id="test", chat_id="test", chat_context=chat_context, initial_messages=initial_messages)
 
     # res = convo.predict(input=user_input)
-    print(reply)
+    print(f"\nai: {reply}\n")
     # print(new_context)
 
     return new_context
@@ -63,7 +68,7 @@ def main():
     chat_context = None
 
     for msg in initial_messages:
-        print(f"{msg['type']}: {msg['text']}")
+        print(f"{msg['type']}: {msg['text']}\n")
 
     while True:
         multiline = False

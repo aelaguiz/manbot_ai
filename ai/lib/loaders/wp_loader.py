@@ -76,7 +76,8 @@ class WPLoader(UnstructuredFileLoader):
                 'type': 'wordpress',
                 "filename": filename,
                 "url": link,
-                "guid": guid
+                "guid": guid,
+                "source": filename
             })
 
             docs.append(doc)

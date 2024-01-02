@@ -29,7 +29,7 @@ logging.config.fileConfig(config_path)
 def main():
 
 
-    lib_model.init(os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), os.getenv("PGVECTOR_CONNECTION_STRING"), temp=os.getenv("OPENAI_TEMPERATURE"))
+    lib_model.init(os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), os.getenv("PGVECTOR_CONNECTION_STRING"), os.getenv("RECORDMANAGER_CONNECTION_STRING"), temp=os.getenv("OPENAI_TEMPERATURE"))
 
     vectordb = lib_doc_vectors.get_vectordb()
     print(vectordb)
@@ -38,7 +38,7 @@ def main():
     docs = loader.load()
     print(len(docs))
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=int(os.getenv('MAX_DOC_SIZE')), chunk_overlap=200, add_start_index=True)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=int(2000), chunk_overlap=200, add_start_index=True)
     all_docs = text_splitter.split_documents(docs)
 
     # for doc in all_docs:
