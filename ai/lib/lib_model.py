@@ -5,6 +5,8 @@ from langchain.globals import set_llm_cache
 from langchain.indexes import SQLRecordManager, index
 from langchain.cache import SQLiteCache
 from langchain.vectorstores.pgvector import PGVector
+from langchain.cache import SQLiteCache
+from langchain.globals import set_llm_cache
 import pinecone
 
 _vectordb = None
@@ -14,6 +16,8 @@ _llm = None
 _embedding = None
 _db = None
 _record_manager = None
+
+
 
 
 def init(model_name, api_key, db_connection_string, record_manager_connection_string, temp=0.5):
@@ -31,6 +35,7 @@ def init(model_name, api_key, db_connection_string, record_manager_connection_st
     _llm = ChatOpenAI(model_name=model_name, temperature=temp)
     _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30)
     _db = initialize_db(db_connection_string, record_manager_connection_string)
+    set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 
     return _llm
 

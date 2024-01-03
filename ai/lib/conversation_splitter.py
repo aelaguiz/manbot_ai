@@ -61,9 +61,9 @@ Expected Output:
 ```json
 [
     {{
-        "Topic": "Game Night Planning",
-        "Participants": ["UserA", "UserB", "UserC"],
-        "Initial Message": {{"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"}}
+        "topic": "Game Night Planning",
+        "participants": ["UserA", "UserB", "UserC"],
+        "first_message": {{"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"}}
     }}
 ]
 ```
@@ -88,31 +88,109 @@ Expected Output:
 ```json
 [
     {{
-        "Topic": "Space Documentary Discussion",
-        "Participants": ["UserX", "UserY", "UserB"],
-        "Initial Message": {{"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"}},
-        "Interwoven Messages": [
-            {{"user": "UserY", "timestamp": "01/01/2024, 10:05 AM", "message": "Yes, watched it last night. It's mind-blowing!"}},
-            {{"user": "UserX", "timestamp": "01/01/2024, 10:20 AM", "message": "Totally agree on the documentary. What did you think of the Mars segment, UserY?"}},
-            {{"user": "UserB", "timestamp": "01/01/2024, 10:45 AM", "message": "I missed the documentary. Can anyone summarize it?"}}
-        ]
+        "topic": "Space Documentary Discussion",
+        "participants": ["UserX", "UserY", "UserB"],
+        "first_message": {{"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"}}
     }},
     {{
-        "Topic": "Project Strategy Discussion",
-        "Participants": ["UserZ", "UserA", "UserY"],
-        "Initial Message": {{"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."}},
-        "interwoven messages": [
-            {{"user": "usera", "timestamp": "01/01/2024, 10:30 am", "message": "@userz, i'm open to suggestions. what are you thinking?"}},
-            {{"user": "usery", "timestamp": "01/01/2024, 10:35 am", "message": "also, @userz, are you proposing a complete overhaul?"}},
-            {{"user": "userz", "timestamp": "01/01/2024, 10:40 am", "message": "not a complete overhaul, but significant changes. let's discuss this afternoon."}},
-            {{"user": "usera", "timestamp": "01/01/2024, 10:50 am", "message": "looking forward to the meeting, @userz. we definitely need fresh ideas."}}
-        ]
+        "topic": "Project Strategy Discussion",
+        "participants": ["UserZ", "UserA", "UserY"],
+        "first_message": {{"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."}}
     }}
 ]```
 
 # INPUT MESSAGES:
 {input_messages}
 """
+
+
+message_classify_prompt_template = """# Discord message classification
+
+Given a list of new Discord messages and the identified conversation topics from Step 1, your task now is to classify each of these new messages into the most relevant existing conversation. Use the following criteria for your classification:
+
+1. Message Content: Compare the content of each new message to the topics of existing conversations.
+2. Participants: Consider if the sender of the new message is already a participant in an existing conversation.
+3. Mentions and Context: Look for direct mentions (@username) and contextual hints in the message that might link it to an existing conversation.
+
+## Guidelines for Classification
+
+1. Topic Relevance: Assign a message to a conversation where its content closely aligns with the identified topic.
+2. Existing Participants: If a message is from a user already participating in a conversation, it's likely to belong to that conversation.
+3. Conversational Flow: Use any indications of ongoing dialogue, like direct responses or follow-up questions, to classify messages.
+
+## Examples
+
+### Example 1
+
+Messages:
+```json
+[
+    {"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"},
+    {"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."},
+    {"user": "UserY", "timestamp": "01/01/2024, 10:05 AM", "message": "Yes, watched it last night. It's mind-blowing!"},
+    {"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"},
+    {"user": "UserB", "timestamp": "01/01/2024, 08:20 PM", "message": "Sounds fun, I'm in!"},
+    {"user": "UserC", "timestamp": "01/01/2024, 08:45 PM", "message": "Saturday works for me!"},
+    {"user": "UserD", "timestamp": "01/01/2024, 09:00 PM", "message": "What time are we starting the game night?"}
+]
+```
+
+Conversations:
+```json
+[
+    {
+        "topic": "Space Documentary Discussion",
+        "participants": ["UserX", "UserY"],
+        "first_message": {"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"}
+    },
+    {
+        "topic": "Game Night Planning",
+        "participants": ["UserA", "UserB", "UserC"],
+        "first_message": {"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"}
+    },
+    {
+        "topic": "Project Strategy Discussion",
+        "participants": ["UserZ"],
+        "first_message": {"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."}
+    }
+]
+```
+
+Expected Output:
+```json
+[
+    {
+        "topic": "Space Documentary Discussion",
+        "messages": [
+            {"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"},
+            {"user": "UserY", "timestamp": "01/01/2024, 10:05 AM", "message": "Yes, watched it last night. It's mind-blowing!"}
+        ]
+    },
+    {
+        "topic": "Game Night Planning",
+        "messages": [
+            {"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"},
+            {"user": "UserB", "timestamp": "01/01/2024, 08:20 PM", "message": "Sounds fun, I'm in!"},
+            {"user": "UserC", "timestamp": "01/01/2024, 08:45 PM", "message": "Saturday works for me!"},
+            {"user": "UserD", "timestamp": "01/01/2024, 09:00 PM", "message": "What time are we starting the game night?"}
+        ]
+    },
+    {
+        "topic": "Project Strategy Discussion",
+        "messages": [
+            {"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."},
+        ]
+    }
+]
+```
+
+# INPUT MESSAGES:
+{input_messages}
+
+# EXISTING CONVERSATIONS:
+{identified_conversations}
+"""
+
 
 from datetime import timedelta
 
@@ -177,13 +255,30 @@ def split_conversations(messages: List[str]) -> List[str]:
     lmd = lc_logger.LlmDebugHandler()
 
     topic_prompt = PromptTemplate.from_template(topic_prompt_template)
+    message_classify_prompt = PromptTemplate.from_template(message_classify_prompt_template)
 
     topic_chain = (
         topic_prompt
         | llm
         | StrOutputParser()
     )
+    
+    message_classify_chain = (
+        message_classify_prompt
+        | llm
+        | StrOutputParser()
+    )
 
-    res = topic_chain.batch([{"input_messages": "\n".join(json.dumps(format_message_for_json(m)) for m in chunk)} for chunk in time_chunks], config={'callbacks': [lmd]})
+    im_string = "\n".join(json.dumps(format_message_for_json(m)) for m in chunk)
+    res = topic_chain.batch([{"input_messages": im_string} for chunk in time_chunks], config={'callbacks': [lmd]})
     logger.debug(res)
+
+    ## TODO: Need to have the topic_chain return json that goes in to the message_classify_chain as identified_conversations
+
+    res2 = message_classify_chain.batch(
+        {
+            "input_messages": im_string,
+            "identified_conversations": json.dumps(res)
+        }
+    )
     return []
