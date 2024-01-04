@@ -39,7 +39,8 @@ def main():
     # vectordb = lib_doc_vectors.get_vectordb()
     # print(vectordb)
 
-    loader = discord_loader.DiscordChatLoader('documents/misc-2024-01-02-15-50-45.txt')
+    # loader = discord_loader.DiscordChatLoader('documents/misc-2024-01-02-15-50-45.txt')
+    loader = discord_loader.DiscordChatLoader('documents/texting-2024-01-03-04-31-25.txt')
     messages = loader.load_messages()
 
     conversations = ai.lib.conversation_splitter.split_conversations(messages=messages)

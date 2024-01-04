@@ -14,23 +14,40 @@ class DiscordChatLoader(UnstructuredFileLoader):
             content = file.readlines()
 
         # Define a regular expression to match the Discord chat structure
-        pattern = re.compile(r'\[(.*?)\] (.*?): (.*)')
+        # pattern = re.compile(r'\[(.*?)\] (.*?): (.*)')
+        pattern = re.compile(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\+\d{2}:\d{2})\] (.*?): (.*)')
+
 
         messages = []
+        current_msg = None
+
         for line in content:
             match = pattern.match(line)
             if match:
+                # If there's a current message being built, add it to messages
+                if current_msg:
+                    messages.append(current_msg)
+                # print(line)
                 timestamp_str, user, message = match.groups()
                 parsed_timestamp = datetime.fromisoformat(timestamp_str)
-
-                print(f"{parsed_timestamp} {user} {message}")
-                messages.append({
+                current_msg = {
                     "timestamp": parsed_timestamp,
                     "user": user,
                     "message": message
-                })
+                }
+            elif current_msg:
+                # If the line doesn't match and there's a current message, append the line to the current message
+                current_msg["message"] += "\n" + line.strip()
+            else:
+                print(f"Failed to match line: {line}")
+                raise Exception(f"Failed to match line: {line}")
+
+        # Add the last message if there is one
+        if current_msg:
+            messages.append(current_msg)
 
         return messages
+
 
 
     def load(self) -> List[Document]:

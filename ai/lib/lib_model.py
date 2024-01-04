@@ -13,6 +13,7 @@ _vectordb = None
 _embedding = None
 _pinecone_index = None
 _llm = None
+_json_llm = None
 _embedding = None
 _db = None
 _record_manager = None
@@ -25,6 +26,7 @@ def init(model_name, api_key, db_connection_string, record_manager_connection_st
     global _embedding
     global _db
     global _record_manager
+    global _json_llm
 
     logger = logging.getLogger(__name__)
 
@@ -32,12 +34,16 @@ def init(model_name, api_key, db_connection_string, record_manager_connection_st
         logger.warning("LLM already initialized, skipping")
         return _llm
 
-    _llm = ChatOpenAI(model_name=model_name, temperature=temp)
+    # _llm = ChatOpenAI(model_name=model_name, temperature=temp)
     _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30)
     _db = initialize_db(db_connection_string, record_manager_connection_string)
     set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 
-    return _llm
+    _json_llm = ChatOpenAI(model_name=model_name, temperature=temp).bind(
+        response_format= {
+            "type": "json_object"
+        }
+    )
 
 
 def get_embedding_fn():
@@ -95,3 +101,14 @@ def get_llm():
         raise Exception("LLM not initialized, call init() first")
 
     return _llm
+
+def get_json_llm():
+    global _json_llm
+
+    logger = logging.getLogger(__name__)
+
+    if not _json_llm:
+        logger.error("JSON LLM not initialized, call init() first")
+        raise Exception("JSON LLM not initialized, call init() first")
+
+    return _json_llm
