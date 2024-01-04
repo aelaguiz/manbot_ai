@@ -14,12 +14,11 @@ class DiscordChatLoader(UnstructuredFileLoader):
             content = file.readlines()
 
         # Define a regular expression to match the Discord chat structure
-        # pattern = re.compile(r'\[(.*?)\] (.*?): (.*)')
         pattern = re.compile(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\+\d{2}:\d{2})\] (.*?): (.*)')
-
 
         messages = []
         current_msg = None
+        message_number = 1
 
         for line in content:
             match = pattern.match(line)
@@ -27,10 +26,12 @@ class DiscordChatLoader(UnstructuredFileLoader):
                 # If there's a current message being built, add it to messages
                 if current_msg:
                     messages.append(current_msg)
-                # print(line)
+                    message_number += 1
+
                 timestamp_str, user, message = match.groups()
                 parsed_timestamp = datetime.fromisoformat(timestamp_str)
                 current_msg = {
+                    "number": message_number,
                     "timestamp": parsed_timestamp,
                     "user": user,
                     "message": message
@@ -44,6 +45,7 @@ class DiscordChatLoader(UnstructuredFileLoader):
 
         # Add the last message if there is one
         if current_msg:
+            current_msg["number"] = message_number
             messages.append(current_msg)
 
         return messages

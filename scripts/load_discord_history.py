@@ -1,3 +1,20 @@
+import logging
+import logging.config
+import dotenv
+import os
+from rich.logging import RichHandler
+
+dotenv.load_dotenv()
+
+
+# Define the configuration file path based on the environment
+config_path = os.getenv('LOGGING_CONF_PATH')
+
+# Use the configuration file appropriate to the environment
+logging.config.fileConfig(config_path)
+rich_handler = RichHandler()
+logging.getLogger().handlers[0] = rich_handler  # Replace the first handler, assuming it's the console handler
+
 import sys
 import os
 import typing
@@ -16,20 +33,9 @@ from ai.lib.loaders import wp_loader, discord_loader
 
 import ai.lib.conversation_splitter
 
+from langchain.globals import set_verbose
+set_verbose(True)
 
-import logging
-import logging.config
-import dotenv
-import os
-
-dotenv.load_dotenv()
-
-
-# Define the configuration file path based on the environment
-config_path = os.getenv('LOGGING_CONF_PATH')
-
-# Use the configuration file appropriate to the environment
-logging.config.fileConfig(config_path)
 
 def main():
 
@@ -39,8 +45,9 @@ def main():
     # vectordb = lib_doc_vectors.get_vectordb()
     # print(vectordb)
 
-    # loader = discord_loader.DiscordChatLoader('documents/misc-2024-01-02-15-50-45.txt')
-    loader = discord_loader.DiscordChatLoader('documents/texting-2024-01-03-04-31-25.txt')
+    loader = discord_loader.DiscordChatLoader('documents/misc-2024-01-02-15-50-45.txt')
+    # loader = discord_loader.DiscordChatLoader('documents/texting-2024-01-03-04-31-25.txt')
+    # loader = discord_loader.DiscordChatLoader('documents/texting-error.txt')
     messages = loader.load_messages()
 
     conversations = ai.lib.conversation_splitter.split_conversations(messages=messages)

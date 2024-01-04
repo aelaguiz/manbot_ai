@@ -9,6 +9,7 @@ from langchain.output_parsers.json import SimpleJsonOutputParser
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_core.pydantic_v1 import BaseModel, Field, validator
+from langchain.callbacks import OpenAICallbackHandler
 from operator import itemgetter
 import json
 from . import lib_model, lc_logger
@@ -16,10 +17,10 @@ from . import lib_model, lc_logger
 
 import logging
 import logging.config
-logging.getLogger("httpx").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
-logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
+# logging.getLogger("httpx").setLevel(logging.CRITICAL)
+# logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
+# logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
+# logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
 
 """
@@ -234,41 +235,48 @@ class ConversationData(BaseModel):
 
 
 from datetime import timedelta
+import traceback
 
-def split_into_time_chunks(messages, interval_minutes=60):
-    """Splits messages into chunks based on time intervals.
+import tiktoken
 
-    Args:
-        messages (list): List of message dictionaries with 'timestamp' as datetime objects.
-        interval_minutes (int): Time interval in minutes for each chunk.
+# Function to count the number of tokens in a message
+def count_tokens(message: str, encoding) -> int:
+    return len(encoding.encode(message))
 
-    Returns:
-        list: List of message chunks, each chunk being a list of messages.
-    """
-
+# Updated function to split messages into chunks based on time intervals and token limits
+def split_into_time_chunks(messages, interval_minutes=60, max_tokens=500):
     if not messages:
         return []
 
-    # Sort messages by timestamp
+    # Load the encoding for token counting
+    encoding = tiktoken.get_encoding("cl100k_base")  # Replace with the appropriate encoding
+
     messages = sorted(messages, key=lambda x: x['timestamp'])
 
     chunks = []
     current_chunk = []
+    current_token_count = 0
     chunk_start_time = messages[0]['timestamp']
 
     for message in messages:
-        if message['timestamp'] < chunk_start_time + timedelta(minutes=interval_minutes):
+        message_token_count = count_tokens(message['message'], encoding)
+
+        if (message['timestamp'] < chunk_start_time + timedelta(minutes=interval_minutes) and 
+            current_token_count + message_token_count <= max_tokens):
             current_chunk.append(message)
+            current_token_count += message_token_count
         else:
             chunks.append(current_chunk)
             current_chunk = [message]
+            current_token_count = message_token_count
             chunk_start_time = message['timestamp']
 
-    # Add the last chunk
     if current_chunk:
         chunks.append(current_chunk)
 
     return chunks
+
+
 
 def format_message_for_json(message):
     """Formats a message dictionary for JSON serialization, converting datetime to string."""
@@ -284,11 +292,11 @@ def split_conversations(messages: List[str]) -> List[str]:
     logger.debug(f"Split into {len(time_chunks)} time chunks")
 
     total_msgs = 0
-    for idx, chunk in enumerate(time_chunks[:1]):
+    for idx, chunk in enumerate(time_chunks):
         logger.debug(f"Chunk {idx+1}: {len(chunk)} messages")
-        for msg in chunk:
-            logger.debug(f"\t\t{msg['timestamp']} {msg['user']}: {msg['message']}")
-            logger.debug(json.dumps(format_message_for_json(msg)))
+        # for msg in chunk:
+        #     logger.debug(f"\t\t{msg['timestamp']} {msg['user']}: {msg['message']}")
+        #     logger.debug(json.dumps(format_message_for_json(msg)))
         # logger.debug(f"\tFirst message: {chunk[0]}")
         # logger.debug(f"\tLast message: {chunk[-1]}")
         total_msgs += len(chunk)
@@ -297,6 +305,7 @@ def split_conversations(messages: List[str]) -> List[str]:
 
     llm = lib_model.get_json_llm()
     lmd = lc_logger.LlmDebugHandler()
+    oaic = OpenAICallbackHandler()
 
     topic_prompt = PromptTemplate.from_template(topic_prompt_template)
     message_classify_prompt = PromptTemplate.from_template(message_classify_prompt_template)
@@ -329,18 +338,33 @@ def split_conversations(messages: List[str]) -> List[str]:
     #     | PydanticOutputParser(pydantic_object=ConversationData)
     # )
 
-    tc = time_chunks[:1]
+    tc = time_chunks
 
     batches = [{"input_messages": json.dumps([format_message_for_json(m) for m in chunk], indent=4)} for chunk in tc]
     # logger.debug(batches[0]["input_messages"])
-    res = message_classify_chain.batch(batches, config={'callbacks': [lmd]})
-    logger.debug(f"Result[0]")
-    logger.debug(json.dumps(json.loads(res[0].json()), indent=4))
+    # res = message_classify_chain.batch(batches, config={'callbacks': [lmd]})
 
-    # res2 = message_classify_chain.batch(
-    #     {
-    #         "input_messages": im_string,
-    #         "identified_conversations": json.dumps(res)
-    #     }
-    # )
+    # for idx, val in enumerate(res):
+    #     logger.debug(f"Result[{idx}]")
+    #     logger.debug("    " + json.dumps(json.loads(val.json()), indent=4))
+
+    for idx, batch in enumerate(batches):
+        try:
+            logger.debug(f"Running Batch {idx} with {len(tc[idx])} messages")
+            res = message_classify_chain.invoke(batch, config={'callbacks': [lmd, oaic]})
+            logger.debug(oaic)
+            logger.debug(f"Result: ")
+            logger.debug("    " + json.dumps(json.loads(res.json()), indent=4))
+        except Exception as e:
+            traceback.print_exc()
+            logger.error(f"Error processing batch {idx}: {e}")
+            logger.error(f"Batch contained {len(tc[idx])} messages")
+            raise e
+
+    # # res2 = message_classify_chain.batch(
+    # #     {
+    # #         "input_messages": im_string,
+    # #         "identified_conversations": json.dumps(res)
+    # #     }
+    # # )
     return []
