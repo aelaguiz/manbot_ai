@@ -2,7 +2,13 @@ import re
 from typing import List, Dict
 from datetime import datetime
 from langchain.document_loaders import UnstructuredFileLoader
+import json
 from langchain_core.documents import Document
+
+import ai.lib.conversation_splitter
+
+import logging
+import hashlib
 
 class DiscordChatLoader(UnstructuredFileLoader):
     def __init__(self, file_path):
@@ -53,33 +59,28 @@ class DiscordChatLoader(UnstructuredFileLoader):
 
 
     def load(self) -> List[Document]:
-        # Open the file
-        with open(self.file_path, 'r', encoding='utf-8') as file:
-            content = file.readlines()
+        messages = self.load_messages()
 
-        # Define a regular expression to match the Discord chat structure
-        pattern = re.compile(r'\[(.*?)\] (.*?): (.*)')
+        logger = logging.getLogger(__name__)
+        
+        docs = []
+        conversations = ai.lib.conversation_splitter.split_conversations(messages=messages)
+        for conversation in conversations:
+            logger.debug(conversation)
+            doc = Document(page_content="\n".join(conversation['messages']), metadata={
+                "title": conversation['topic'],
+                "participants": conversation['participants'],
+                "type": "discord",
+                "source": f"Discord Chat Export {self.file_path}",
+                "filename": self.file_path,
+                "author": json.dumps(conversation['participants']),
+                'type': 'wordpress',
+            })
 
-        lines = []
-        for line in content:
-            match = pattern.match(line)
-            if match:
-                timestamp, user, message = match.groups()
-                print(f"{timestamp} {user} {message}")
-                lines.append(line)
+            content_hash = hashlib.sha256(doc.page_content.encode()).hexdigest()
+            metadata_hash = hashlib.sha256(json.dumps(doc.metadata).encode()).hexdigest()
+            guid = f"{content_hash}-{metadata_hash}"
+            doc.metadata['guid'] = guid
+            docs.append(doc)
 
-        doc = Document(page_content="\n".join(lines), metadata={
-            "type": "discord",
-            "source": f"Discord Chat Export {self.file_path}",
-            "filename": self.file_path
-        })
-
-        return [doc]
-
-        # "title": title if title else 'Unknown Title',
-        # "author": "Robbie Kramer",
-        # 'type': 'wordpress',
-        # "filename": filename,
-        # "url": link,
-        # "guid": guid,
-        # "source": filename
+        return docs

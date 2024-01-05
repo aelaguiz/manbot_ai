@@ -10,6 +10,7 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_core.pydantic_v1 import BaseModel, Field, validator
 from langchain.callbacks import OpenAICallbackHandler
+from langchain_core.documents import Document
 from operator import itemgetter
 import json
 from . import lib_model, lc_logger
@@ -54,13 +55,12 @@ Analyze the messages and output the extracted conversations with the required de
 ## Examples
 
 ### Example 1:
+
 Example Input:
-```json
-[
-    {{"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"}},
-    {{"user": "UserB", "timestamp": "01/01/2024, 08:20 PM", "message": "Sounds fun, I'm in!"}},
-    {{"user": "UserC", "timestamp": "01/01/2024, 08:45 PM", "message": "Saturday works for me!"}}
-]
+```
+1: UserA (01/01/2024, 08:15 PM): Hey everyone, how about a game night this Saturday?
+2: UserB (01/01/2024, 08:20 PM): Sounds fun, I'm in!
+3: UserC (01/01/2024, 08:45 PM): Saturday works for me!
 ```
 
 Expected Output:
@@ -70,7 +70,7 @@ Expected Output:
         {{
             "topic": "Game Night Planning",
             "participants": ["UserA", "UserB", "UserC"],
-            "first_message": {{"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"}}
+            "first_message": 1
         }}
     ]
 }}
@@ -78,18 +78,16 @@ Expected Output:
 
 ### Example 2:
 Example Input:
-```json
-[
-    {{"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"}},
-    {{"user": "UserY", "timestamp": "01/01/2024, 10:05 AM", "message": "Yes, watched it last night. It's mind-blowing!"}},
-    {{"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."}},
-    {{"user": "UserX", "timestamp": "01/01/2024, 10:20 AM", "message": "Totally agree on the documentary. What did you think of the Mars segment, UserY?"}},
-    {{"user": "UserA", "timestamp": "01/01/2024, 10:30 AM", "message": "@UserZ, I'm open to suggestions. What are you thinking?"}},
-    {{"user": "UserY", "timestamp": "01/01/2024, 10:35 AM", "message": "Mars segment was the best. Also, @UserZ, are you proposing a complete overhaul?"}},
-    {{"user": "UserZ", "timestamp": "01/01/2024, 10:40 AM", "message": "Not a complete overhaul, but significant changes. Let's discuss this afternoon."}},
-    {{"user": "UserB", "timestamp": "01/01/2024, 10:45 AM", "message": "I missed the documentary. Can anyone summarize it?"}},
-    {{"user": "UserA", "timestamp": "01/01/2024, 10:50 AM", "message": "Looking forward to the meeting, @UserZ. We definitely need fresh ideas."}}
-]
+```
+4: UserX (01/01/2024, 10:00 AM): Has anyone seen the latest space documentary?
+5: UserY (01/01/2024, 10:05 AM): Yes, watched it last night. It's mind-blowing!
+6: UserZ (01/01/2024, 10:15 AM): I think our project needs a new approach.
+7: UserX (01/01/2024, 10:20 AM): Totally agree on the documentary. What did you think of the Mars segment, UserY?
+8: UserA (01/01/2024, 10:30 AM): @UserZ, I'm open to suggestions. What are you thinking?
+9: UserY (01/01/2024, 10:35 AM): Mars segment was the best. Also, @UserZ, are you proposing a complete overhaul?
+10: UserZ (01/01/2024, 10:40 AM): Not a complete overhaul, but significant changes. Let's discuss this afternoon.
+11: UserB (01/01/2024, 10:45 AM): I missed the documentary. Can anyone summarize it?
+12: UserA (01/01/2024, 10:50 AM): Looking forward to the meeting, @UserZ. We definitely need fresh ideas.
 ```
 
 Expected Output:
@@ -99,18 +97,20 @@ Expected Output:
         {{
             "topic": "Space Documentary Discussion",
             "participants": ["UserX", "UserY", "UserB"],
-            "first_message": {{"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"}}
+            "first_message": 4
         }},
         {{
             "topic": "Project Strategy Discussion",
             "participants": ["UserZ", "UserA", "UserY"],
-            "first_message": {{"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."}}
+            "first_message": 6
         }}
     ]
 }}```
 
 # INPUT MESSAGES:
+```
 {input_messages}
+```
 
 **Note**: Respond with the output json and nothing else
 """
@@ -130,21 +130,18 @@ Given a list of new Discord messages and the identified conversation topics from
 2. Existing Participants: If a message is from a user already participating in a conversation, it's likely to belong to that conversation.
 3. Conversational Flow: Use any indications of ongoing dialogue, like direct responses or follow-up questions, to classify messages.
 
-## Examples
+## Example
 
-### Example 1
+Input Messages:
+```
+13: UserX (01/01/2024, 10:00 AM): Has anyone seen the latest space documentary?
+14: UserZ (01/01/2024, 10:15 AM): I think our project needs a new approach.
+15: UserY (01/01/2024, 10:05 AM): Yes, watched it last night. It's mind-blowing!
+16: UserA (01/01/2024, 08:15 PM): Hey everyone, how about a game night this Saturday?
+17: UserB (01/01/2024, 08:20 PM): Sounds fun, I'm in!
+18: UserC (01/01/2024, 08:45 PM): Saturday works for me!
+19: UserD (01/01/2024, 09:00 PM): What time are we starting the game night?
 
-Messages:
-```json
-[
-    {{"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"}},
-    {{"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."}},
-    {{"user": "UserY", "timestamp": "01/01/2024, 10:05 AM", "message": "Yes, watched it last night. It's mind-blowing!"}},
-    {{"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"}},
-    {{"user": "UserB", "timestamp": "01/01/2024, 08:20 PM", "message": "Sounds fun, I'm in!"}},
-    {{"user": "UserC", "timestamp": "01/01/2024, 08:45 PM", "message": "Saturday works for me!"}},
-    {{"user": "UserD", "timestamp": "01/01/2024, 09:00 PM", "message": "What time are we starting the game night?"}}
-]
 ```
 
 Conversations:
@@ -154,17 +151,17 @@ Conversations:
         {{
             "topic": "Space Documentary Discussion",
             "participants": ["UserX", "UserY"],
-            "first_message": {{"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"}}
+            "first_message": 13
         }},
         {{
             "topic": "Game Night Planning",
             "participants": ["UserA", "UserB", "UserC"],
-            "first_message": {{"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"}}
+            "first_message": 16
         }},
         {{
             "topic": "Project Strategy Discussion",
             "participants": ["UserZ"],
-            "first_message": {{"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."}}
+            "first_message": 14
         }}
     ]
 }}
@@ -178,25 +175,25 @@ Expected Output:
             "topic": "Space Documentary Discussion",
             "participants": ["UserX", "UserY"],
             "messages": [
-                {{"user": "UserX", "timestamp": "01/01/2024, 10:00 AM", "message": "Has anyone seen the latest space documentary?"}},
-                {{"user": "UserY", "timestamp": "01/01/2024, 10:05 AM", "message": "Yes, watched it last night. It's mind-blowing!"}}
+                13,
+                15
             ]
         }},
         {{
             "topic": "Game Night Planning",
             "participants": ["UserA", "UserB", "UserC"],
             "messages": [
-                {{"user": "UserA", "timestamp": "01/01/2024, 08:15 PM", "message": "Hey everyone, how about a game night this Saturday?"}},
-                {{"user": "UserB", "timestamp": "01/01/2024, 08:20 PM", "message": "Sounds fun, I'm in!"}},
-                {{"user": "UserC", "timestamp": "01/01/2024, 08:45 PM", "message": "Saturday works for me!"}},
-                {{"user": "UserD", "timestamp": "01/01/2024, 09:00 PM", "message": "What time are we starting the game night?"}}
+                16,
+                17,
+                18,
+                19
             ]
         }},
         {{
             "topic": "Project Strategy Discussion",
             "participants": ["UserZ"],
             "messages": [
-                {{"user": "UserZ", "timestamp": "01/01/2024, 10:15 AM", "message": "I think our project needs a new approach."}},
+                14
             ]
         }}
     ]
@@ -204,10 +201,14 @@ Expected Output:
 ```
 
 # INPUT MESSAGES:
+```
 {input_messages}
+```
 
 # EXISTING CONVERSATIONS:
+```json
 {conversations}
+```
 
 
 **Note**: Respond with the output json and nothing else
@@ -225,8 +226,9 @@ class Message(BaseModel):
 class Conversation(BaseModel):
     topic: str
     participants: List[str]
-    first_message: Optional[Message] = None
-    messages: Optional[List[Message]] = None
+    first_message: Optional[int] = None  # Reference to the message number
+    messages: Optional[List[int]] = None  # List of message numbers
+
 
 class ConversationData(BaseModel):
     conversation_messages: List[Conversation]
@@ -244,7 +246,7 @@ def count_tokens(message: str, encoding) -> int:
     return len(encoding.encode(message))
 
 # Updated function to split messages into chunks based on time intervals and token limits
-def split_into_time_chunks(messages, interval_minutes=60, max_tokens=500):
+def split_into_time_chunks(messages, interval_minutes=60, max_tokens=2048):
     if not messages:
         return []
 
@@ -285,9 +287,28 @@ def format_message_for_json(message):
     return formatted_message
 
 
+def format_message_for_prompt(message):
+    """
+    Formats a message dictionary for input into the prompt.
+
+    Args:
+        message (Dict): A dictionary representing the message.
+                        Expected keys: 'number', 'user', 'timestamp', 'message'.
+    
+    Returns:
+        str: The formatted message string.
+    """
+    # Example format: "13: UserX (01/01/2024, 10:00 AM): Has anyone seen the latest space documentary?"
+    timestamp = message['timestamp'].strftime("%d/%m/%Y, %I:%M %p") if isinstance(message['timestamp'], datetime) else message['timestamp']
+    formatted_message = f"{message['number']}: {message['user']} ({timestamp}): \"{message['message']}\""
+    return formatted_message
+
 def split_conversations(messages: List[str]) -> List[str]:
     logger = logging.getLogger(__name__)
     logger.debug(f"Splitting conversation on {len(messages)} messages")
+
+    message_lookup = {msg['number']: msg for msg in messages}
+
     time_chunks = split_into_time_chunks(messages, interval_minutes=60*24*2)
     logger.debug(f"Split into {len(time_chunks)} time chunks")
 
@@ -340,7 +361,7 @@ def split_conversations(messages: List[str]) -> List[str]:
 
     tc = time_chunks
 
-    batches = [{"input_messages": json.dumps([format_message_for_json(m) for m in chunk], indent=4)} for chunk in tc]
+    batches = [{"input_messages": "\n".join(format_message_for_prompt(m) for m in chunk)} for chunk in tc]
     # logger.debug(batches[0]["input_messages"])
     # res = message_classify_chain.batch(batches, config={'callbacks': [lmd]})
 
@@ -348,6 +369,7 @@ def split_conversations(messages: List[str]) -> List[str]:
     #     logger.debug(f"Result[{idx}]")
     #     logger.debug("    " + json.dumps(json.loads(val.json()), indent=4))
 
+    return_docs = []
     for idx, batch in enumerate(batches):
         try:
             logger.debug(f"Running Batch {idx} with {len(tc[idx])} messages")
@@ -355,6 +377,22 @@ def split_conversations(messages: List[str]) -> List[str]:
             logger.debug(oaic)
             logger.debug(f"Result: ")
             logger.debug("    " + json.dumps(json.loads(res.json()), indent=4))
+            for conversation in res.conversation_messages:
+                logger.debug(f"Conversation: {conversation.topic}")
+                logger.debug(f"    Participants: {conversation.participants}")
+                logger.debug(f"    Messages: ")
+                chats = []
+                for msg_num in conversation.messages:
+                    msg = message_lookup[msg_num]
+                    logger.debug(f"        {format_message_for_prompt(msg)}")
+                    chats.append(format_message_for_prompt(msg))
+
+                return_doc = {
+                    'topic': conversation.topic,
+                    'participants': conversation.participants,
+                    'messages': chats
+                }
+                return_docs.append(return_doc)
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error processing batch {idx}: {e}")
@@ -367,4 +405,4 @@ def split_conversations(messages: List[str]) -> List[str]:
     # #         "identified_conversations": json.dumps(res)
     # #     }
     # # )
-    return []
+    return return_docs
