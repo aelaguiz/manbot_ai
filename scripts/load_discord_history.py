@@ -35,6 +35,7 @@ from langchain.document_loaders import DirectoryLoader
 import ai.lib.conversation_splitter
 
 from langchain.globals import set_verbose
+import glob
 set_verbose(True)
 
 
@@ -43,28 +44,19 @@ def main():
 
     lib_model.init(os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), os.getenv("PGVECTOR_CONNECTION_STRING"), os.getenv("RECORDMANAGER_CONNECTION_STRING"), temp=os.getenv("OPENAI_TEMPERATURE"))
 
-    # vectordb = lib_doc_vectors.get_vectordb()
-    # print(vectordb)
+    txt_files = glob.glob(os.path.join(path, "*.txt"))
+    total_files = len(txt_files)
+    for i, file_path in enumerate(txt_files):
+        print(f"Processing file {i+1}/{total_files}: {file_path}")
+        loader = discord_loader.DiscordChatLoader(file_path)
+        for doc in loader.load():
+            text = doc.page_content
+            metadata = doc.metadata
+            print(f"\n\nAdding document title:{metadata['title']} author:{metadata['author']} guid:{metadata['guid']} {len(text)} first 50 chars: {text[:50]}")
+            print(doc.page_content)
+            lib_doc_vectors.bulk_add_docs([doc])
+            print("Done loading")
 
-    loader = DirectoryLoader(path, glob="**/*.txt", show_progress=False, loader_cls=discord_loader.DiscordChatLoader, use_multithreading=False)
-
-    # loader = discord_loader.DiscordChatLoader('documents/misc-2024-01-02-15-50-45.txt')
-    # loader = discord_loader.DiscordChatLoader('documents/texting-2024-01-03-04-31-25.txt')
-    # loader = discord_loader.DiscordChatLoader('documents/texting-error.txt')
-    all_docs = loader.load()
-    print(f"Loaded {len(all_docs)} messages")
-
-
-    for doc in all_docs:
-        text = doc.page_content
-        metadata = doc.metadata
-        print(f"\n\nAdding document title:{metadata['title']} author:{metadata['author']} guid:{metadata['guid']} {len(text)} first 50 chars: {text[:50]}")
-        print(doc.page_content)
-
-    #     # lib_doc_vectors.add_doc(doc, metadata['guid'])
-    print(f"Adding {len(all_docs)} documents...")
-    lib_doc_vectors.bulk_add_docs(all_docs)
-    print("Done")
 
 
 

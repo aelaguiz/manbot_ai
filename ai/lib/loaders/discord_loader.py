@@ -67,20 +67,24 @@ class DiscordChatLoader(UnstructuredFileLoader):
         conversations = ai.lib.conversation_splitter.split_conversations(messages=messages)
         for conversation in conversations:
             logger.debug(conversation)
-            doc = Document(page_content="\n".join(conversation['messages']), metadata={
+
+            timestamp = conversation['messages'][0]['timestamp'].strftime("%d/%m/%Y, %I:%M %p")
+
+            doc = Document(page_content="\n".join(ai.lib.conversation_splitter.format_message_for_prompt(c) for c in conversation['messages']), metadata={
                 "title": conversation['topic'],
+                "timestamp": timestamp,
                 "participants": conversation['participants'],
                 "type": "discord",
                 "source": f"Discord Chat Export {self.file_path}",
                 "filename": self.file_path,
-                "author": json.dumps(conversation['participants']),
-                'type': 'wordpress',
+                "author": json.dumps(conversation['participants'])
             })
 
             content_hash = hashlib.sha256(doc.page_content.encode()).hexdigest()
             metadata_hash = hashlib.sha256(json.dumps(doc.metadata).encode()).hexdigest()
             guid = f"{content_hash}-{metadata_hash}"
             doc.metadata['guid'] = guid
-            docs.append(doc)
+            # docs.append(doc)
+            yield doc
 
-        return docs
+        # return docs

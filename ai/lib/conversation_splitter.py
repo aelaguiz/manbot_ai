@@ -385,24 +385,16 @@ def split_conversations(messages: List[str]) -> List[str]:
                 for msg_num in conversation.messages:
                     msg = message_lookup[msg_num]
                     logger.debug(f"        {format_message_for_prompt(msg)}")
-                    chats.append(format_message_for_prompt(msg))
+                    chats.append(msg)
 
                 return_doc = {
                     'topic': conversation.topic,
                     'participants': conversation.participants,
                     'messages': chats
                 }
-                return_docs.append(return_doc)
+                yield return_doc
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error processing batch {idx}: {e}")
             logger.error(f"Batch contained {len(tc[idx])} messages")
             raise e
-
-    # # res2 = message_classify_chain.batch(
-    # #     {
-    # #         "input_messages": im_string,
-    # #         "identified_conversations": json.dumps(res)
-    # #     }
-    # # )
-    return return_docs

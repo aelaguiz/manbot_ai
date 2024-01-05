@@ -139,8 +139,11 @@ def format_docs(docs):
     return res
 
 def _format_doc(doc):
+    print(doc.metadata)
     if doc.metadata['type'] == 'wordpress':
         return _format_wordpress(doc)
+    elif doc.metadata['type'] == 'discord':
+        return _format_discord(doc)
 
     logger = logging.getLogger(__name__)
     logger.error(f"Unknown doc type: {doc.metadata['type']}")
@@ -152,6 +155,17 @@ Author: {doc.metadata['author']}
 URL: {doc.metadata['url']}
 
 Text: \"\"\"
+{doc.page_content}
+\"\"\""""
+
+def _format_discord(doc):
+    return f"""### Discord message
+Topic: {doc.metadata['title']}
+Filename: {doc.metadata['filename']}
+Participant: {doc.metadata['participants']}
+Timestamp: {doc.metadata['timestamp']}
+
+Chat: \"\"\"
 {doc.page_content}
 \"\"\""""
 
@@ -228,11 +242,11 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
             """
 
         vectordb = lib_model.get_vectordb()
-        retriever = vectordb.as_retriever(search_args={"k": 5})
+        retriever = vectordb.as_retriever(search_kwargs={"k": 5})
 
-        # docs = vectordb.similarity_search_with_score(user_input, k=10)
+        # docs = vectordb.similarity_search_with_score(user_input, k=5)
         # for doc, score in docs:
-        #     print(score, doc.page_content)
+        #     print(score, _format_doc(doc))
 
 
 
