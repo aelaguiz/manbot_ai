@@ -9,15 +9,19 @@ import ai.lib.conversation_splitter
 
 import logging
 import hashlib
+import traceback
 
 class DiscordChatLoader(UnstructuredFileLoader):
     def __init__(self, file_path):
         super().__init__(file_path)
 
     def load_messages(self) -> List[Dict]:
+        logger = logging.getLogger(__name__)
         # Open the file
         with open(self.file_path, 'r', encoding='utf-8') as file:
             content = file.readlines()
+
+        logger.info(f"Loading file {self.file_path}")
 
         # Define a regular expression to match the Discord chat structure
         pattern = re.compile(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\+\d{2}:\d{2})\] (.*?): (.*)')
@@ -59,14 +63,22 @@ class DiscordChatLoader(UnstructuredFileLoader):
 
 
     def load(self) -> List[Document]:
-        messages = self.load_messages()
 
         logger = logging.getLogger(__name__)
         
-        docs = []
+        messages = self.load_messages()
+        logger.debug(f"Loaded {len(messages)} messages")
+        # try:
+        #     logger.debug(f"Loaded {len(messages)} messages")
+        #     return ai.lib.conversation_splitter.split_conversations(messages=messages)
+        # except Exception as e:
+        #     logger.error(f"Failed to split conversations: {traceback.format_exc()}")
         conversations = ai.lib.conversation_splitter.split_conversations(messages=messages)
         for conversation in conversations:
             logger.debug(conversation)
+            if not conversation['messages']:
+                logger.warning(f"Skipping conversation with no messages: {conversation}")
+                continue
 
             timestamp = conversation['messages'][0]['timestamp'].strftime("%d/%m/%Y, %I:%M %p")
 
@@ -86,5 +98,3 @@ class DiscordChatLoader(UnstructuredFileLoader):
             doc.metadata['guid'] = guid
             # docs.append(doc)
             yield doc
-
-        # return docs

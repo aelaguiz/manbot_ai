@@ -34,9 +34,8 @@ from langchain.document_loaders import DirectoryLoader
 
 import ai.lib.conversation_splitter
 
-from langchain.globals import set_verbose
 import glob
-set_verbose(True)
+import random
 
 
 def main():
@@ -44,7 +43,9 @@ def main():
 
     lib_model.init(os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), os.getenv("PGVECTOR_CONNECTION_STRING"), os.getenv("RECORDMANAGER_CONNECTION_STRING"), temp=os.getenv("OPENAI_TEMPERATURE"))
 
-    txt_files = glob.glob(os.path.join(path, "*.txt"))
+    txt_files = list(glob.glob(os.path.join(path, "*.txt")))
+
+    random.shuffle(txt_files)
     total_files = len(txt_files)
     for i, file_path in enumerate(txt_files):
         print(f"Processing file {i+1}/{total_files}: {file_path}")

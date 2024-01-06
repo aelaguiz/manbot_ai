@@ -14,14 +14,20 @@ from langchain_core.documents import Document
 from operator import itemgetter
 import json
 from . import lib_model, lc_logger
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+)  # for exponential backoff
+
 
 
 import logging
 import logging.config
-# logging.getLogger("httpx").setLevel(logging.CRITICAL)
-# logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
-# logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
-# logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
+logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
 
 """
@@ -303,6 +309,10 @@ def format_message_for_prompt(message):
     formatted_message = f"{message['number']}: {message['user']} ({timestamp}): \"{message['message']}\""
     return formatted_message
 
+@retry(wait=wait_random_exponential(min=1, max=30), stop=stop_after_attempt(2))
+def batch_classify_with_backoff(message_classify_chain, *args, **kwargs):
+    return message_classify_chain.batch(*args, **kwargs)
+
 def split_conversations(messages: List[str]) -> List[str]:
     logger = logging.getLogger(__name__)
     logger.debug(f"Splitting conversation on {len(messages)} messages")
@@ -369,32 +379,57 @@ def split_conversations(messages: List[str]) -> List[str]:
     #     logger.debug(f"Result[{idx}]")
     #     logger.debug("    " + json.dumps(json.loads(val.json()), indent=4))
 
-    return_docs = []
-    for idx, batch in enumerate(batches):
-        try:
-            logger.debug(f"Running Batch {idx} with {len(tc[idx])} messages")
-            res = message_classify_chain.invoke(batch, config={'callbacks': [lmd, oaic]})
-            logger.debug(oaic)
-            logger.debug(f"Result: ")
-            logger.debug("    " + json.dumps(json.loads(res.json()), indent=4))
-            for conversation in res.conversation_messages:
-                logger.debug(f"Conversation: {conversation.topic}")
-                logger.debug(f"    Participants: {conversation.participants}")
-                logger.debug(f"    Messages: ")
-                chats = []
-                for msg_num in conversation.messages:
-                    msg = message_lookup[msg_num]
-                    logger.debug(f"        {format_message_for_prompt(msg)}")
-                    chats.append(msg)
+    batch_size = 5
+    batches_of_batches = [batches[i:i + batch_size] for i in range(0, len(batches), batch_size)]
 
-                return_doc = {
-                    'topic': conversation.topic,
-                    'participants': conversation.participants,
-                    'messages': chats
-                }
-                yield return_doc
+    for idx, batch_of_batches in enumerate(batches_of_batches):
+        try:
+            logger.debug(f"Processing batch {idx+1}/{len(batches_of_batches)} containing {len(batch_of_batches)} batches")
+            res = batch_classify_with_backoff(message_classify_chain, batch_of_batches, config={'callbacks': [oaic, lmd]})
+            logger.debug(oaic)
+            for batch in res:
+                logger.debug(f"Result: ")
+                logger.debug(f"     {batch}")
+                # logger.debug("    " + json.dumps(json.loads(res.json()), indent=4))
+                for conversation in batch.conversation_messages:
+                    logger.debug(f"Conversation: {conversation.topic}")
+                    logger.debug(f"    Participants: {conversation.participants}")
+                    logger.debug(f"    Messages: ")
+                    chats = []
+                    for msg_num in conversation.messages:
+                        msg = message_lookup[msg_num]
+                        logger.debug(f"        {format_message_for_prompt(msg)}")
+                        chats.append(msg)
+
+                    return_doc = {
+                        'topic': conversation.topic,
+                        'participants': conversation.participants,
+                        'messages': chats
+                    }
+                    yield return_doc
         except Exception as e:
-            traceback.print_exc()
+            traceback_str = traceback.format_exc()
             logger.error(f"Error processing batch {idx}: {e}")
-            logger.error(f"Batch contained {len(tc[idx])} messages")
+            logger.error(f"Batch contained {len(batch_of_batches[idx])} batches")
+
+            # Create a dictionary to store the exception information
+            exception_info = {
+                "exception": str(e),
+                "traceback": traceback_str,
+                "batch_of_batches": batch_of_batches
+            }
+
+            # Create the "fails" directory if it doesn't exist
+            fails_directory = "fails"
+            os.makedirs(fails_directory, exist_ok=True)
+
+            # Generate a unique filename
+            filename = f"exception_{idx}.json"
+            filepath = os.path.join(fails_directory, filename)
+
+            # Save the exception information into a JSON file
+            with open(filepath, "w") as file:
+                json.dump(exception_info, file, indent=4)
+
+            logger.error(f"Exception information saved to: {filepath}")
             raise e

@@ -175,6 +175,27 @@ def make_retrieval_context(obj):
 
     return obj
 
+    
+def simple_get_chat_reply(user_input):
+    logger = logging.getLogger(__name__)
+    logger.debug(f"AI: simple_get_chat_reply called with user_input: {user_input}")
+    llm = lib_model.get_json_llm()
+
+    prompt = ChatPromptTemplate.from_template("{input}")
+
+    chain = (
+        {
+            "input": RunnablePassthrough()
+        }
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    res = chain.invoke({"input": user_input})
+
+    return res
+
 def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
     """
     Main interface for handling chat sessions with the AI.
