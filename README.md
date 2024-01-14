@@ -1,5 +1,8 @@
 # ai for sanity.bot
 
+# 1/5
+
+Rival 
 
 # 1/3
 
