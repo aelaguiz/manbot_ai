@@ -44,31 +44,18 @@ RECORDMANAGER_CONNECTION_STRING = os.getenv("RECORDMANAGER_CONNECTION_STRING")
 init(os.getenv("FIREBASE_ADMIN_SDK_JSON"), os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), CONNECTION_STRING, RECORDMANAGER_CONNECTION_STRING, temp=os.getenv("OPENAI_TEMPERATURE"))
 
 
-def process_command(user_input, chat_context, initial_messages):
+def process_command(user_input):
     # print(f"Asking AI about: {user_input}")
 
-    reply, new_context = ai.get_chat_reply(user_input, session_id="test", chat_id="test", chat_context=chat_context, initial_messages=initial_messages)
+    reply  = ai.simple_get_chat_reply(user_input)
 
     # res = convo.predict(input=user_input)
     print(f"\nai: {reply}\n")
     # print(new_context)
 
-    return new_context
-
-
 
 def main():
     bindings = KeyBindings()
-
-    initial_messages = [{
-        "type": "ai",
-        "text": "Hey! Let's start with the basics. Are you looking for help with a specific girl or are you looking for more general advice?"
-    }]
-
-    chat_context = None
-
-    for msg in initial_messages:
-        print(f"{msg['type']}: {msg['text']}\n")
 
     while True:
         multiline = False
@@ -84,12 +71,12 @@ def main():
                     elif line.strip().lower() == 'quit':
                         return  # Exit the CLI
                     else:
-                        chat_context = process_command(line, chat_context, initial_messages)
+                        process_command(line)
                         break
                 else:
                     # Multiline input mode
                     line = prompt('... ', multiline=True, key_bindings=bindings)
-                    chat_context = process_command(line, chat_context, initial_messages)
+                    process_command(line)
                     multiline = False
             except EOFError:
                 return
