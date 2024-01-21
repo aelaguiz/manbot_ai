@@ -39,7 +39,7 @@ def init(model_name, api_key, db_connection_string, record_manager_connection_st
     _llm = ChatOpenAI(model_name=model_name, temperature=temp)
     _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30)
     _db = initialize_db(db_connection_string, record_manager_connection_string)
-    # set_llm_cache(SQLiteCache(database_path=".langchain.db"))
+    set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 
     _json_llm = ChatOpenAI(model_name=model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=0).bind(
         response_format= {

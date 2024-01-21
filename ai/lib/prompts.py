@@ -17,6 +17,9 @@ comguide_prompt = """You're a writing assistant, and you can only reply with JSO
 ## Progression:
 With each iteration, the guide will become more detailed and authoritative, serving as a comprehensive reference for emulating the author's style effectively.
 
+## Example Output:
+{example}
+
 ## Current Guide Content
 {comguide}
 
@@ -27,18 +30,20 @@ The guide should maintain the same JSON structure throughout its development.
 ## New Writing Samples
 """
 
-merge_comguides_prompt = """Your task is to merge two comprehensive guides into a single, cohesive JSON document. Ensure all unique content and nuances, especially writing samples, from both guides are preserved without duplication. Maintain the JSON structure.
-
+merge_comguides_prompt = """Your task is to merge two comprehensive guides into a single, cohesive JSON document. The merged guide should preserve all unique content and nuances from both sources, especially writing samples, without any duplication. Carefully maintain the JSON structure throughout the process.
 
 # Steps:
-1. **Combine Sections**: For each section, combine content from both guides. 
-2. **Remove Duplicates**: Eliminate any duplicate information found in both guides.
-3. **Preserve Nuances and Examples**: Maintain all unique nuances and writing samples from each guide.
-4. **Ensure Logical Flow**: Rearrange content to ensure a logical, coherent flow in the merged guide.
-5. **Maintain Consistency**: Check for consistent formatting and style throughout.
-6. **Final Review**: Review the merged guide for completeness and clarity.
+1. **Combine Sections in JSON Format**: For each section, merge content from both guides into a single JSON structure. 
+2. **Remove Duplicates While Preserving JSON Integrity**: Identify and eliminate any duplicate information, ensuring the JSON format remains intact.
+3. **Preserve Nuances and Direct Quotes**: Maintain all unique nuances and direct quotes from the writing samples in each guide. Every observation or point should be accompanied by a relevant direct quote from the original guides.
+4. **Ensure Logical Flow in JSON**: Rearrange the combined content to ensure a logical, coherent flow within the JSON document.
+5. **Maintain JSON Formatting Consistency**: Ensure that the formatting and style are consistent throughout the JSON document.
+6. **Final JSON Review**: Review the merged JSON guide for completeness, clarity, and structural integrity.
 
 # Output:
-Create a single, comprehensive guide that includes all relevant information from both sources, presented clearly and coherently.
-Only include content from the two sources, do not add any commentary, conclusion or other information.
+- Generate a single, comprehensive JSON guide that seamlessly integrates all relevant information from both sources.
+- The JSON document should clearly present the combined content in a coherent and structured manner.
+- Only include content from the two provided sources in the JSON format. Refrain from adding any external commentary, conclusions, or additional information.
+
+Remember, the focus is on creating a well-structured JSON document that effectively merges the two guides while emphasizing the inclusion of all direct quotes and unique insights from the original content.
 """

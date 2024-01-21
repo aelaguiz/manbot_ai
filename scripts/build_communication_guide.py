@@ -1,4 +1,5 @@
 import sys
+import json
 import os
 
 import html
@@ -6,6 +7,7 @@ import html2text
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatMessagePromptTemplate, ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain.output_parsers import PydanticOutputParser
 
 # Append the directory above 'scripts' to sys.path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -30,6 +32,56 @@ logging.getLogger("httpx").setLevel(logging.CRITICAL)
 logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
 logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
 logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
+
+from pydantic import BaseModel, Field
+from typing import Dict, List
+
+class Introduction(BaseModel):
+    overview_of_the_author: List[str] = Field(..., alias="Overview of the Author")
+
+class GeneralWritingStyle(BaseModel):
+    voice_and_tone: List[str] = Field(..., alias="Voice and Tone")
+    sentence_structure: List[str] = Field(..., alias="Sentence Structure")
+    paragraph_structure: List[str] = Field(..., alias="Paragraph Structure")
+
+class VocabularyAndLanguageUse(BaseModel):
+    word_choice: List[str] = Field(..., alias="Word Choice")
+    language_style: List[str] = Field(..., alias="Language Style")
+    metaphors_and_similes: List[str] = Field(..., alias="Metaphors and Similes")
+
+class CharacterizationAndDialogue(BaseModel):
+    character_development: List[str] = Field(..., alias="Character Development")
+    dialogue_style: List[str] = Field(..., alias="Dialogue Style")
+
+class NarrativeElements(BaseModel):
+    pacing_and_rhythm: List[str] = Field(..., alias="Pacing and Rhythm")
+    story_structure: List[str] = Field(..., alias="Story Structure")
+    themes_and_motifs: List[str] = Field(..., alias="Themes and Motifs")
+
+class EmotionalContext(BaseModel):
+    evoking_emotions: List[str] = Field(..., alias="Evoking Emotions")
+    atmosphere_and_setting: List[str] = Field(..., alias="Atmosphere and Setting")
+
+class PersonalInsightsAndQuirks(BaseModel):
+    authors_influences: List[str] = Field(..., alias="Author's Influences")
+    personal_quirks: List[str] = Field(..., alias="Personal Quirks")
+
+class ExamplesAndAnalysis(BaseModel):
+    excerpts_from_works: List[str] = Field(..., alias="Excerpts from Works")
+    detailed_analysis: List[str] = Field(..., alias="Detailed Analysis")
+
+class WritersStyleGuide(BaseModel):
+    introduction: Introduction = Field(..., alias="1. Introduction")
+    general_writing_style: GeneralWritingStyle = Field(..., alias="2. General Writing Style")
+    vocabulary_and_language_use: VocabularyAndLanguageUse = Field(..., alias="3. Vocabulary and Language Use")
+    characterization_and_dialogue: CharacterizationAndDialogue = Field(..., alias="4. Characterization and Dialogue")
+    narrative_elements: NarrativeElements = Field(..., alias="5. Narrative Elements")
+    emotional_context: EmotionalContext = Field(..., alias="6. Emotional Context")
+    personal_insights_and_quirks: PersonalInsightsAndQuirks = Field(..., alias="7. Personal Insights and Quirks")
+    examples_and_analysis: ExamplesAndAnalysis = Field(..., alias="8. Examples and Analysis")
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 def main():
@@ -73,47 +125,31 @@ def main():
         prompt
         | llm
         | StrOutputParser()
-    )
-
-    merge_chain = (
-        merge_prompt
-        | llm
-        | StrOutputParser()
+        | PydanticOutputParser(pydantic_object=WritersStyleGuide)
     )
 
     guidelog = open('guidelog.txt', 'w')
+    comguides = []
     for doc in docs:
         new_comguide = chain.invoke({
             "input": doc.page_content,
-            "comguide": comguide
+            "comguide": ai_defaults.comguide_default,
+            "example": ai_defaults.comguide_example,
         }, config={'callbacks': [lmd]})
 
 
         guidelog.write(f"\n\n********************************************************\n")
         guidelog.write(f"Document: {doc.metadata['title']}\n")
         guidelog.write(f"Content: {doc.page_content}\n\n")
-        guidelog.write(f"Old comguide: {comguide}\n\n")
-        guidelog.write(f"New comguide: {new_comguide}\n\n")
-
-        # if not default_guide:
-        #     merged_comguide = merge_chain.invoke({
-        #         "input_1": comguide,
-        #         "input_2": new_comguide
-        #     }, config={'callbacks': [lmd]})
-
-        #     guidelog.write(f"Merged comguide: {merged_comguide}\n\n")
-        #     break
-        # else:
-        #     merged_comguide = new_comguide
+        guidelog.write(f"Comguide: {new_comguide}\n\n")
 
         guidelog.flush()
+        comguides.append(new_comguide.dict())
 
-        # with open(comguide_path, "w") as f:
-        #     f.write(merged_comguide)
+        with open(comguide_path, "w") as f:
+            json.dump(comguides, f)
 
-        # comguide = merged_comguide
         comguide = new_comguide
-        default_guide = False
 
 
 if __name__ == "__main__":
