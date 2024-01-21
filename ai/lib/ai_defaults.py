@@ -36,7 +36,7 @@ comguide_default = json.dumps({
     }
 }, indent=4)
 
-comguide_example = json.dumps({
+comguide_example = {
     "1. Introduction": {
       "Overview of the Author": ["Known for a blend of witty and insightful prose, as evident in the line: 'Life is like a camera, focus on the good times, develop from the negatives.'"]
     },
@@ -71,4 +71,5 @@ comguide_example = json.dumps({
       "Excerpts from Works": ["'In the heart of the storm, I found my tranquility; in the midst of chaos, my peace.'"],
       "Detailed Analysis": ["Analyzes the use of contrasting imagery to create depth, as seen in: 'The joyful sun stood stark against the grieving sky.'"]
     }
-}, indent=4)
+}
+comguide_example_json = json.dumps(comguide_example, indent=4)
