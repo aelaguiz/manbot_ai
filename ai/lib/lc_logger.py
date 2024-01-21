@@ -10,7 +10,6 @@ from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langchain_core.outputs import LLMResult
 
-logger = logging.getLogger(__name__)
 
 class LlmDebugHandler(BaseCallbackHandler):
     @property
@@ -23,6 +22,7 @@ class LlmDebugHandler(BaseCallbackHandler):
     ) -> None:
         """Print out the prompts."""
         try:
+            logger = logging.getLogger(__name__)
             logger.debug(f"LLM Start: {serialized} {prompts}")
             for i, prompt in enumerate(prompts):
                 logger.debug(f"  Prompt {i}: {prompt}")
@@ -32,6 +32,7 @@ class LlmDebugHandler(BaseCallbackHandler):
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         """Print out the token."""
         try:
+            logger = logging.getLogger(__name__)
             logger.debug(f"LLM Token: {token}")
         except Exception as e:
             logger.error(f"An error occurred in on_llm_new_token: {e}")
@@ -41,6 +42,7 @@ class LlmDebugHandler(BaseCallbackHandler):
         try:
             return self
         except Exception as e:
+            logger = logging.getLogger(__name__)
             logger.error(f"An error occurred in __copy__: {e}")
 
     def __deepcopy__(self, memo: Any) -> "LlmDebugHandler":
@@ -48,20 +50,24 @@ class LlmDebugHandler(BaseCallbackHandler):
         try:
             return self
         except Exception as e:
+            logger = logging.getLogger(__name__)
             logger.error(f"An error occurred in __deepcopy__: {e}")
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """Collect token usage."""
         try:
+            logger = logging.getLogger(__name__)
             logger.debug(f"LLM Result: {response}")
             for f in response.generations:
                 for gen in f:
                     logger.debug(f"  Generation: {gen.text}")
         except Exception as e:
+            logger = logging.getLogger(__name__)
             logger.error(f"An error occurred in on_llm_end: {e}")
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """Collect token usage."""
+        logger = logging.getLogger(__name__)
         logger.debug(f"LLM Result: {response}")
         for f in response.generations:
             for gen in f:

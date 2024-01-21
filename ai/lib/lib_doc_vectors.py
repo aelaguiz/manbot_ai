@@ -26,4 +26,6 @@ def bulk_add_docs(docs: list):
         )
         logger.info(f"Successfully added {len(docs)} documents in bulk: {res}")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         logger.error(f"Error adding documents in bulk: {e}")

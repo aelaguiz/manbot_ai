@@ -30,6 +30,7 @@ def init(model_name, api_key, db_connection_string, record_manager_connection_st
     global _json_llm
 
     logger = logging.getLogger(__name__)
+    logger.debug(f"Initializing model")
 
     if _llm:
         logger.warning("LLM already initialized, skipping")
@@ -45,6 +46,7 @@ def init(model_name, api_key, db_connection_string, record_manager_connection_st
             "type": "json_object"
         }
     )
+
 
 
 def get_embedding_fn():
@@ -65,6 +67,9 @@ def initialize_db(db_connection_string, record_manager_connection_string, db_col
     if _db:
         raise Exception("DB already initialized")
 
+    logger = logging.getLogger(__name__)
+    logger.debug(f"Initializing database {db_connection_string}")
+
     _db = PGVector(
         embedding_function=get_embedding_fn(),
         collection_name=db_collection_name,
@@ -74,8 +79,10 @@ def initialize_db(db_connection_string, record_manager_connection_string, db_col
     namespace = f"pgvector/{db_collection_name}"
     _record_manager = SQLRecordManager(namespace, db_url=record_manager_connection_string)
 
+    logger.debug(f'Creating schema for namespace {namespace}')
     _record_manager.create_schema()
 
+    logger.debug(f"Done initializing database")
     return _db
 
 def get_record_manager():

@@ -28,8 +28,10 @@ logging.config.fileConfig(config_path)
 
 def main():
 
+    print("Loading model")
 
     lib_model.init(os.getenv("OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), os.getenv("PGVECTOR_CONNECTION_STRING"), os.getenv("RECORDMANAGER_CONNECTION_STRING"), temp=os.getenv("OPENAI_TEMPERATURE"))
+    print("Done loading")
 
     vectordb = lib_doc_vectors.get_vectordb()
     print(vectordb)
