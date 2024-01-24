@@ -1,4 +1,21 @@
+
 # ai for sanity.bot
+
+
+# 1/23
+
+
+architecture
+
+note taker AIs that just build impressions - gpt 3.5
+These get summarized and presented back to the thoughtful AI
+
+1. Client message comes in
+2. Fans out to every note taker immediately  & in parallel
+3. Impressions go to top level prompt for refinement
+
+e.g. client understanding
+
 
 # 1/5
 

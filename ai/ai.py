@@ -179,7 +179,7 @@ def make_retrieval_context(obj):
 def simple_get_chat_reply(user_input):
     logger = logging.getLogger(__name__)
     logger.debug(f"AI: simple_get_chat_reply called with user_input: {user_input}")
-    llm = lib_model.get_json_llm()
+    llm = lib_model.get_json_fast_llm()
 
     prompt = ChatPromptTemplate.from_template("{input}")
 
@@ -216,7 +216,7 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     logger = logging.getLogger(__name__)
     logger.debug(f"AI: get_chat_reply called with user_input: {user_input}, session_id: {session_id}, chat_id: {chat_id}, chat_context: {chat_context}")
     try:
-        llm = lib_model.get_llm()
+        llm = lib_model.get_fast_llm()
         lmd = lc_logger.LlmDebugHandler()
         
         memory = None

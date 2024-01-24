@@ -334,7 +334,7 @@ def split_conversations(messages: List[str]) -> List[str]:
 
     logger.debug(f"Counted {total_msgs} messages in {len(time_chunks)} chunks")
 
-    llm = lib_model.get_json_llm()
+    llm = lib_model.get_json_fast_llm()
     lmd = lc_logger.LlmDebugHandler()
     oaic = OpenAICallbackHandler()
 

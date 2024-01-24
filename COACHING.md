@@ -10,6 +10,7 @@
 
 ## How we accomplish these goals
 
+### Notes from Robbie 
 1. *Understanding Client's Skill Level and Challenges:*
    - The coach begins by assessing the client's skill level with male-female dynamics.
    - He categorizes clients into archetypes (e.g., total beginner, too much pickup study, new age beliefs).

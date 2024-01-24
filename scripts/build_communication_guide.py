@@ -200,7 +200,7 @@ def main():
     text_splitter = CharacterTextSplitter.from_tiktoken_encoder(chunk_size=3000, chunk_overlap=0)
     all_docs = text_splitter.split_documents(docs)
 
-    llm = lib_model.get_json_llm()
+    llm = lib_model.get_json_fast_llm()
     prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template(prompts.comguide_prompt),
         HumanMessagePromptTemplate.from_template("{input}"),
