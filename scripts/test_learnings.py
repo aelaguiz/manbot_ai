@@ -16,6 +16,8 @@ from langchain.agents.format_scratchpad.openai_tools import (
 )
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 
+from langchain.memory import ConversationBufferMemory
+from langchain.memory.chat_message_histories.in_memory import ChatMessageHistory
 
 from collections.abc import Iterable
 import threading
@@ -24,8 +26,10 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain.agents import AgentExecutor
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 import numpy as np
 
+from operator import itemgetter
 
 # Append the directory above 'scripts' to sys.path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -61,8 +65,11 @@ from typing import Dict, List
 oai = OpenAICallbackHandler()
 lmd = lc_logger.LlmDebugHandler()
 
-class ResponseObject(BaseModel):
+class ClientProfileResponseObject(BaseModel):
     beliefs: List[str]
+
+class ClientGoalsResponseObject(BaseModel):
+    specific_problems_or_goals: List[str]
 
 
 # @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
@@ -90,7 +97,7 @@ def main():
 
     lmd = lc_logger.LlmDebugHandler()  
     # db = lib_docdb.get_docdb()
-    llm = lib_model.get_fast_llm()
+    llm = lib_model.get_json_fast_llm()
 
 
     # Load chat_path file into an array of strings, one per line
@@ -98,53 +105,119 @@ def main():
         chat_lines = file.readlines()
     chat_lines = [line.strip() for line in chat_lines]
 
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=prompts.profile_prompt)), 
-        # MessagesPlaceholder(variable_name='chat_history'),
-        HumanMessagePromptTemplate.from_template("Last 10 messages:\n{last_messages}"),
-        HumanMessagePromptTemplate.from_template("Existing beliefs:\n{existing_beliefs}"),
-        HumanMessagePromptTemplate.from_template("New message: \"{input}\""),
-        MessagesPlaceholder(variable_name='agent_scratchpad')
+    profile_prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=prompts.client_profile_prompt)), 
+        # ChatPromptTemplate.from_template(f"**AI Conversation History**:\n"),
+        # MessagesPlaceholder(variable_name='history'),
+        HumanMessagePromptTemplate.from_template("\n**Last 10 client/coach messages**:\n{last_messages}"),
+        HumanMessagePromptTemplate.from_template("\n**Existing beliefs**:\n{existing_beliefs}"),
+        HumanMessagePromptTemplate.from_template("**New messages**: \"{input}\""),
     ])
-    tools = []
-    a = (
+
+    profile_chat_history = ChatMessageHistory()
+    profile_memory = ConversationBufferMemory(chat_memory=profile_chat_history, input_key="input", output_key="output", return_messages=True)
+    profile_loaded_memory = RunnablePassthrough.assign(
+        history=RunnableLambda(profile_memory.load_memory_variables) | itemgetter("history"),
+    )
+
+    client_profile_agent = (
+        # profile_loaded_memory
+        # | 
         {
             "input": lambda x: x['input'],
+            # "history": lambda x: x['history'],
             "client_name": lambda x: x['client_name'],
             "last_messages": lambda x: x['last_messages'],
-            "existing_beliefs": lambda x: x['existing_beliefs'],
-            "agent_scratchpad": lambda x: format_to_openai_tool_messages(
-                x["intermediate_steps"]
-            )
+            "existing_beliefs": lambda x: x['existing_beliefs']
         }
-        | prompt
+        | profile_prompt
         | llm
-        | OpenAIToolsAgentOutputParser()
+        | PydanticOutputParser(pydantic_object=ClientProfileResponseObject)
     )
+
+    def profile_output_parse_fn(output):
+        new_beliefs = output.beliefs
+        if len(new_beliefs) == 1 and new_beliefs[0] == 'No new beliefs':
+            return []
+        else:
+            return new_beliefs
+
+    goals_prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=prompts.client_goals_prompt)), 
+        # ChatPromptTemplate.from_template(f"**AI Conversation History**:\n"),
+        # MessagesPlaceholder(variable_name='history'),
+        HumanMessagePromptTemplate.from_template("\n**Last 10 client/coach messages**:\n{last_messages}"),
+        HumanMessagePromptTemplate.from_template("\n**Existing goals or insights**:\n{existing_beliefs}"),
+        HumanMessagePromptTemplate.from_template("**New messages**: \"{input}\""),
+    ])
+
+    goals_chat_history = ChatMessageHistory()
+    goals_memory = ConversationBufferMemory(chat_memory=goals_chat_history, input_key="input", output_key="output", return_messages=True)
+    goals_loaded_memory = RunnablePassthrough.assign(
+        history=RunnableLambda(goals_memory.load_memory_variables) | itemgetter("history"),
+    )
+    client_goals_agent = (
+        # goals_loaded_memory
+        # | 
+        {
+            "input": lambda x: x['input'],
+            # "history": lambda x: x['history'],
+            "client_name": lambda x: x['client_name'],
+            "last_messages": lambda x: x['last_messages'],
+            "existing_beliefs": lambda x: x['existing_beliefs']
+        }
+        | goals_prompt
+        | llm
+        | PydanticOutputParser(pydantic_object=ClientGoalsResponseObject)
+    )
+
+    def goals_output_parse_fn(output):
+        new_beliefs = output.specific_problems_or_goals
+        if len(new_beliefs) == 1 and new_beliefs[0] == 'No new insights':
+            return []
+        else:
+            return new_beliefs
     
-    print(a)
     experts = {
-        'client_profile': AgentExecutor(agent=a, tools=tools, verbose=True)
+        'client_profile': {'agent': client_profile_agent, 'beliefs': [], 'memory': profile_memory, 'output_parse_fn': profile_output_parse_fn, 'beliefs_key': 'beliefs'},
+        'client_goals': {'agent': client_goals_agent, 'beliefs': [], 'memory': goals_memory, 'output_parse_fn': goals_output_parse_fn, 'beliefs_key': 'specific_problems_or_goals'}
     }
 
-    for idx, line in enumerate(chat_lines):
-        idx_bottom = idx-11 if idx-11 > 0 else 0
-        idx_top = idx-1 if idx > 0 else 0
-        latest_message = line
-        last_10_lines = chat_lines[idx_bottom:idx_top]
-        print(f"Chat_lines from {idx_bottom} to {idx_top}")
+    history_size = 10
+    chunk_size = 6
+    for idx in range(0, len(chat_lines), chunk_size):
+        idx_bottom = idx-history_size if idx-history_size > 0 else 0
+        last_10_lines = chat_lines[idx_bottom:idx]
+        latest_messages = chat_lines[idx:idx+chunk_size]
 
         
-        for expert_name, expert_agent in experts.items():
+        for expert_name, expert_data in experts.items():
+            expert_agent = expert_data['agent']
+            expert_beliefs = expert_data['beliefs']
+            expert_memory = expert_data['memory']
+            expert_beliefs_key = expert_data['beliefs_key']
+            expert_output_parse_fn = expert_data['output_parse_fn']
             logger.debug(f"Invoking expert {expert_name}")
-            call_chain(expert_agent, {
+            reply = call_chain(expert_agent, {
                 'client_name': client_name,
-                'existing_beliefs': json.dumps({"beliefs": []}, indent=4),
+                'existing_beliefs': json.dumps({expert_beliefs_key: expert_beliefs}, indent=4),
                 'last_messages': "\n".join(last_10_lines),
-                'input': latest_message
+                'input': "\n".join(latest_messages)
             })
+            print("Reply", reply)
+            # expert_memory.save_context({
+            #     'client_name': client_name,
+            #     'existing_beliefs': json.dumps({expert_beliefs_key: expert_beliefs}, indent=4),
+            #     'last_messages': "\n".join(last_10_lines),
+            #     'input': latest_message
+            # }, {"output": reply.model_dump_json()})
 
-        break
+
+
+            new_beliefs = expert_output_parse_fn(reply)
+
+            expert_beliefs.extend(new_beliefs)
+
 
 
         # if line.startswith("Dan:"):

@@ -1,6 +1,16 @@
 
 # ai for sanity.bot
 
+1/25
+
+we also need action biased experts
+
+expert on date planning
+expert on texting & messaging
+
+expert on relationships & shit tests
+
+
 
 # 1/23
 
@@ -15,6 +25,9 @@ These get summarized and presented back to the thoughtful AI
 3. Impressions go to top level prompt for refinement
 
 e.g. client understanding
+
+
+We also need suggester
 
 
 # 1/5
