@@ -1,6 +1,14 @@
 
 # ai for sanity.bot
 
+# 1/25
+
+Stepped back from agents, they weren't doing anything
+
+Now just working on simple prompts that track certain attributes
+
+The profile beliefs are growing quickly likely a duplication bug of some sort
+
 1/25
 
 we also need action biased experts
