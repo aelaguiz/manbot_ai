@@ -166,7 +166,7 @@ def main():
     
     experts = {
         'client_profile': {'agent': client_profile_agent, 'beliefs': [], 'memory': profile_memory},
-        # 'client_goals': {'agent': client_goals_agent, 'beliefs': [], 'memory': goals_memory}
+        'client_goals': {'agent': client_goals_agent, 'beliefs': [], 'memory': goals_memory}
     }
 
     summarize_notes_prompt = ChatPromptTemplate.from_messages([

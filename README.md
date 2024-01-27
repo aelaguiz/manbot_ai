@@ -1,6 +1,16 @@
 
 # ai for sanity.bot
 
+
+# 1/26
+
+Try to identify conversations that are most like this one
+
+Whatsapp conversations
+Discord conversations
+
+
+
 # 1/25
 
 Stepped back from agents, they weren't doing anything
