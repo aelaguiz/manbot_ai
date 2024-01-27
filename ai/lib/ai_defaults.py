@@ -73,3 +73,23 @@ comguide_example = {
     }
 }
 comguide_example_json = json.dumps(comguide_example, indent=4)
+
+discord_comguide_example = {
+  "Greetings and Sign-offs": [
+  ],
+  "Common Responses": [
+  ],
+  "Emoji Usage": [
+    "Example: Uses 👋 to say goodbye"
+  ],
+  "Interactive Engagement": [
+  ],
+  "Sample Chat Exchanges": [
+    [
+      "SUBJECT SAYS: EXAMPLE QUESTION",
+      "USER SAYS: EXAMPLE RESPONSE",
+      "SUBJECT SAYS: EXAMPLE RESPONSE",
+    ]
+  ]
+}
+discord_comguide_example_json = json.dumps(discord_comguide_example, indent=4)

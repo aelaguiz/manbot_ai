@@ -62,7 +62,6 @@ def format_docs(docs):
     return res
 
 def _format_doc(doc):
-    print(doc.metadata)
     if doc.metadata['type'] == 'wordpress':
         return _format_wordpress(doc)
     elif doc.metadata['type'] == 'discord':
@@ -150,7 +149,7 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     logger = logging.getLogger(__name__)
     logger.debug(f"AI: get_chat_reply called with user_input: {user_input}, session_id: {session_id}, chat_id: {chat_id}, chat_context: {chat_context}")
     try:
-        llm = lib_model.get_fast_llm()
+        llm = lib_model.get_smart_llm()
         lmd = lc_logger.LlmDebugHandler()
         
         memory = None
@@ -277,11 +276,26 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
         ingest_to_db = messages_to_dict(extracted_messages)
         new_chat_context = json.dumps(ingest_to_db)
 
+
+        tone_prompt = ChatPromptTemplate.from_messages([
+            SystemMessagePromptTemplate.from_template(prompts.adjust_tone),
+            HumanMessagePromptTemplate.from_template("Coach's reply to transform: ```{input}```")
+        ])
+
+        tone_chain = (
+            tone_prompt
+            | llm
+            | StrOutputParser()
+        )
+
+        tone_adjusted_reply = tone_chain.invoke({"input": reply, "style": prompts.robbies_style}, config={'callbacks': [lmd]})
+        # print(tone_adjusted_reply)
+
         # print(reply)
         # print(new_chat_context)
 
 
-        return reply, new_chat_context
+        return tone_adjusted_reply, new_chat_context
 
     except Exception as e:
         import traceback

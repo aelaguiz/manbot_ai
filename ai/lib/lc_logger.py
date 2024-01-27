@@ -25,7 +25,7 @@ class LlmDebugHandler(BaseCallbackHandler):
             logger = logging.getLogger(__name__)
             # logger.debug(f"LLM Start: {serialized} {prompts}")
             for i, prompt in enumerate(prompts):
-                logger.info(f"  Prompt {i}: {prompt}")
+                logger.debug(f"  Prompt {i}: {prompt}")
         except Exception as e:
             logger.error(f"An error occurred in on_llm_start: {e}")
 

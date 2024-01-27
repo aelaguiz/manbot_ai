@@ -153,38 +153,44 @@ def process_document(doc, chain, lmd):
             logging.info(f"Sleeping for {sleep_time} seconds.")
             time.sleep(sleep_time)
 
+def combine_json_objects(file_path):
+    with open(file_path, 'r') as file:
+        data = json.load(file)
+
+    combined_dict = {}
+    for item in data:
+        for key, value in item.items():
+            if key in combined_dict:
+                if isinstance(value, list):
+                    combined_dict[key].extend(value)
+                else:
+                    for subkey, subvalue in value.items():
+                        if subkey in combined_dict[key]:
+                            combined_dict[key][subkey].extend(subvalue)
+                        else:
+                            combined_dict[key][subkey] = subvalue
+            else:
+                combined_dict[key] = value
+
+    return combined_dict
+
 
 def main():
     lmd = lc_logger.LlmDebugHandler()
-    comguide_path = sys.argv[1]
-    # if os.path.exists(comguide_path):
-    #     default_guide = False
-    #     comguide = open(comguide_path, "r").read()
-    # else:
-    default_guide = True
-    comguide = ai_defaults.comguide_default
 
-    logger.debug("Loading model")
+    comguide_path = sys.argv[1]
+
+    print(f"Got comguide path {comguide_path}")
+    comguide = combine_json_objects(comguide_path)
+    print(comguide.keys())
+
 
     lib_model.init(os.getenv("SMART_OPENAI_MODEL"), os.getenv("FAST_OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), os.getenv("PGVECTOR_CONNECTION_STRING"), os.getenv("RECORDMANAGER_CONNECTION_STRING"), temp=os.getenv("OPENAI_TEMPERATURE"))
 
-    logger.debug("Done loading")
 
-    vectordb = lib_doc_vectors.get_vectordb()
-    logger.debug(vectordb)
-
-    loader = discord_loader.DiscordChatLoader('documents/discord/texting-2024-01-03-04-31-25.txt')
-    # loader = wp_loader.WPLoader('documents/innerconfidence.WordPress.2023-12-29.xml')
-    docs = loader.load_messages_as_docs()
-
-    # text_splitter = RecursiveCharacterTextSplitter(chunk_size=int(500), chunk_overlap=200, add_start_index=True)
-    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(chunk_size=3000, chunk_overlap=0)
-    all_docs = text_splitter.split_documents(docs)
-    logger.debug(f"Split {len(docs)} documents into {len(all_docs)} chunks")
-
-    llm = lib_model.get_json_fast_llm()
+    llm = lib_model.get_smart_llm()
     prompt = ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(prompts.discord_comguide_prompt),
+        SystemMessagePromptTemplate.from_template(prompts.synthesize_tone_section),
         HumanMessagePromptTemplate.from_template("{input}"),
     ])
 
@@ -192,33 +198,26 @@ def main():
         prompt
         | llm
         | StrOutputParser()
-        | PydanticOutputParser(pydantic_object=DiscordChatGuide)
     )
 
-    # all_docs = all_docs[:1]
-    guidelog = open('guidelog.txt', 'w')
-    comguides = []
-    num_threads = int(sys.argv[2]) if len(sys.argv) > 2 else 4
+    # new_comguide = {}
+    # for key in comguide.keys():
+    res = chain.invoke({
+        "input": comguide,
+        "subject_name": "robbiekramer"
+    }, config={'callbacks': []})
 
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        future_to_doc = {executor.submit(process_document, doc, chain, lmd): doc for doc in all_docs}
-        comguides = []
+    # new_comguide[key] = res
+    print(res)
 
-        for doc, future in zip(all_docs, as_completed(future_to_doc)):
-            doc_result = future.result()
-            if doc_result:
-                with threading.Lock():
-                    guidelog.write(f"\n\n********************************************************\n")
-                    # guidelog.write(f"Document: {doc.metadata['title']}\n")
-                    guidelog.write(f"Content: {doc.page_content}\n\n")
+    # print(new_comguide)
 
-                    guidelog.write(f"Comguide: {json.dumps(doc_result, indent=4)}\n\n")
-                    guidelog.flush()
 
-                    comguides.append(doc_result)
+#     # all_docs = all_docs[:1]
+#     guidelog = open('guidelog.txt', 'w')
+#     comguides = []
+#     num_threads = int(sys.argv[2]) if len(sys.argv) > 2 else 4
 
-                    with open(comguide_path, "w") as f:
-                        json.dump(comguides, f)
 
 
 if __name__ == "__main__":
