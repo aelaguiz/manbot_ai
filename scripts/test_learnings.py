@@ -77,7 +77,7 @@ def call_chain(chain, input_obj):
     # logger.debug(f"Prompting with: \n{prompt.format(**input_obj)}")
 
     res = chain.invoke(input_obj, config={
-        'callbacks': [oai, lmd]
+        'callbacks': [oai]
     })
 
     logger.debug(oai)
@@ -97,7 +97,7 @@ def main():
 
     lmd = lc_logger.LlmDebugHandler()  
     # db = lib_docdb.get_docdb()
-    llm = lib_model.get_json_fast_llm()
+    llm = lib_model.get_fast_llm()
 
 
     # Load chat_path file into an array of strings, one per line
@@ -132,15 +132,8 @@ def main():
         }
         | profile_prompt
         | llm
-        | PydanticOutputParser(pydantic_object=ClientProfileResponseObject)
+        | StrOutputParser()
     )
-
-    def profile_output_parse_fn(output):
-        new_beliefs = output.beliefs
-        if len(new_beliefs) == 1 and new_beliefs[0] == 'No new beliefs':
-            return []
-        else:
-            return new_beliefs
 
     goals_prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=prompts.client_goals_prompt)), 
@@ -168,20 +161,30 @@ def main():
         }
         | goals_prompt
         | llm
-        | PydanticOutputParser(pydantic_object=ClientGoalsResponseObject)
+        | StrOutputParser()
     )
-
-    def goals_output_parse_fn(output):
-        new_beliefs = output.specific_problems_or_goals
-        if len(new_beliefs) == 1 and new_beliefs[0] == 'No new insights':
-            return []
-        else:
-            return new_beliefs
     
     experts = {
-        'client_profile': {'agent': client_profile_agent, 'beliefs': [], 'memory': profile_memory, 'output_parse_fn': profile_output_parse_fn, 'beliefs_key': 'beliefs'},
-        'client_goals': {'agent': client_goals_agent, 'beliefs': [], 'memory': goals_memory, 'output_parse_fn': goals_output_parse_fn, 'beliefs_key': 'specific_problems_or_goals'}
+        'client_profile': {'agent': client_profile_agent, 'beliefs': [], 'memory': profile_memory},
+        # 'client_goals': {'agent': client_goals_agent, 'beliefs': [], 'memory': goals_memory}
     }
+
+    summarize_notes_prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=prompts.summarize_notes)), 
+        HumanMessagePromptTemplate.from_template("\n**Existing coach notes**:\n{input}"),
+    ])
+
+    summarize_notes_chain = (
+        # goals_loaded_memory
+        # | 
+        {
+            "input": lambda x: x['input'],
+            "client_name": lambda x: x['client_name'],
+        }
+        | summarize_notes_prompt
+        | llm
+        | StrOutputParser()
+    )
 
     history_size = 10
     chunk_size = 6
@@ -195,16 +198,14 @@ def main():
             expert_agent = expert_data['agent']
             expert_beliefs = expert_data['beliefs']
             expert_memory = expert_data['memory']
-            expert_beliefs_key = expert_data['beliefs_key']
-            expert_output_parse_fn = expert_data['output_parse_fn']
             logger.debug(f"Invoking expert {expert_name}")
             reply = call_chain(expert_agent, {
                 'client_name': client_name,
-                'existing_beliefs': json.dumps({expert_beliefs_key: expert_beliefs}, indent=4),
+                'existing_beliefs': "\n\n".join(expert_beliefs),
                 'last_messages': "\n".join(last_10_lines),
                 'input': "\n".join(latest_messages)
             })
-            print("Reply", reply)
+            logger.debug(f"Reply: {reply}")
             # expert_memory.save_context({
             #     'client_name': client_name,
             #     'existing_beliefs': json.dumps({expert_beliefs_key: expert_beliefs}, indent=4),
@@ -212,11 +213,16 @@ def main():
             #     'input': latest_message
             # }, {"output": reply.model_dump_json()})
 
+            expert_beliefs.append(reply)
 
+            reply = call_chain(summarize_notes_chain, {
+                'client_name': client_name,
+                'input': "\n".join(expert_beliefs)
+            })
+            logger.debug(f"Summarized beliefs: {reply}")
 
-            new_beliefs = expert_output_parse_fn(reply)
-
-            expert_beliefs.extend(new_beliefs)
+            expert_beliefs = [reply]
+            expert_data['beliefs'] = expert_beliefs
 
 
 

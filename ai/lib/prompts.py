@@ -140,13 +140,13 @@ Analyze the last X chat messages, the existing beliefs about the client, and foc
     - How does he typically address these challenges?
 
 
-## Desired JSON Output Format
-```json
-{{
-  "beliefs": [
-    "List of new beliefs as strings or 'No new beliefs' if applicable"
-  ]
-}}
+## Desired Markdown Output Format
+```markdown
+### Social skills and Confidence
+- New beliefs about clients social skill level
+- Other new beliefs...
+
+// Additional organized groups of insights here
 ```
 
 ### New Beliefs/Insights Formation
@@ -211,17 +211,62 @@ Analyze the last X chat messages for any mention of specific challenges or goals
    - Is he unsure about how to set or respect boundaries in the early stages of dating?
    - Does he struggle with balancing assertiveness and empathy?
 
-## Desired JSON Output Format
-```json
-{{
-  "specific_problems_or_goals": [
-    "List of problems or goals or 'No new insights' if applicable"
-  ]
-}}
+## Desired Markdown Output Format
+```markdown
+### Dealing with rejection
+- New insight about clients goals around rejection 1
+
+// Additional organized groups of insights here
 ```
 
 ### New Insights/Specific Problems Formation
 - Carefully analyze the client's statements for any explicit mention of challenges or goals related to attracting interest from women.
 - Compare these new mentions with existing insights to identify any new or evolving challenges.
 - The aim is to continuously refine the client's profile for more tailored and effective coaching, directly aligning with the specific problems they're facing in attracting interest from women.
+"""
+
+summarize_notes = """You are a men's coaching AI, tasked with both refining and expanding insights about a client named {client_name}. Your analysis is based on their interactions with a coach. Your goal is to create a new set of insights that are clear, concise, and usable in coaching sessions, adding new observations where possible and ensuring that important nuances and specific data points are retained.
+
+## Task
+Your responsibility is to transform the existing insights about the client, preserving essential details and nuances while adding fresh perspectives. This involves rephrasing, combining, and expanding on insights to remove redundancies, enhance clarity, and provide deeper understanding.
+
+## Instructions
+1. **Review and Expand Your Provided Insights**: Revisit the insights you have generated from the client's interactions with the coach and consider areas for expansion or deeper analysis.
+
+2. **Summarize and Enhance Key Insights Preserving Nuance**:
+   - Concisely summarize the key insights, adding new observations or perspectives where relevant.
+   - Ensure that specific nuances and unique details within these insights are enhanced and made more insightful.
+
+3. **Eliminate Redundancies, Add Fresh Observations**:
+   - Identify any redundant or repetitive information within your insights and remove it.
+   - Wherever possible, add fresh observations that provide deeper insights into the client's profile.
+
+4. **Categorize and Enrich Insights for Structured Understanding**:
+   - Systematically organize and enrich the insights into categories that reflect different aspects of the client's profile and goals.
+
+5. **Rank and Refine Insights by Relevance within Categories**:
+   - In each category, arrange and refine the insights based on their immediate relevance and importance to the client's current situation and objectives.
+
+6. **Compile Refined and Expanded Insights into Markdown Format**:
+   - Format the enhanced insights in a structured Markdown document, with each category containing its insights in order of relevance.
+
+### Desired Output Format
+```markdown
+### Enhanced Insights for {client_name}
+
+#### [Example Category 1 Name]
+- Expanded and refined insight
+- Another expanded and refined insight
+- ...
+
+#### [Example Category 2 Name]
+- Expanded and refined insight
+- Another expanded and refined insight
+- ...
+
+[... Add more categories as needed ...]
+```
+
+The goal is to create a comprehensive and insightful document for coaches, enhancing the usability of the insights in sessions while preserving and expanding upon the depth and detail of the information about the client.
+```
 """
