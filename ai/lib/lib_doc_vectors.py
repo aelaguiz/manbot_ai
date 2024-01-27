@@ -21,7 +21,7 @@ def bulk_add_docs(docs: list):
             docs,
             get_record_manager(),
             vectordb,
-            cleanup="incremental",
+            cleanup=None,
             source_id_key="source"
         )
         logger.info(f"Successfully added {len(docs)} documents in bulk: {res}")

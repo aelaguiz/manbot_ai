@@ -32,7 +32,7 @@ logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
 logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
 logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
-from ai.lib import lib_model, lc_logger
+from ai.lib import lib_model, lc_logger, lib_conversation
 
 
 logger = logging.getLogger(__name__)
@@ -46,18 +46,20 @@ init(os.getenv("SMART_OPENAI_MODEL"), os.getenv("SMART_OPENAI_MODEL"), os.getenv
 
 def process_command(user_input, chat_context, initial_messages):
     # print(f"Asking AI about: {user_input}")
+    lib_conversation.save_message(user_input, "human")
 
     reply, new_context = ai.get_chat_reply(user_input, session_id="test", chat_id="test", chat_context=chat_context, initial_messages=initial_messages)
 
     # res = convo.predict(input=user_input)
     print(f"\nai: {reply}\n")
-    # print(new_context)
+    lib_conversation.save_message(reply, "ai")
 
     return new_context
 
 
 
 def main():
+    lib_conversation.init_conversation()
     bindings = KeyBindings()
 
     initial_messages = [{
@@ -69,6 +71,7 @@ def main():
 
     for msg in initial_messages:
         print(f"{msg['type']}: {msg['text']}\n")
+        lib_conversation.save_message(msg['text'], msg['type'])
 
     while True:
         multiline = False

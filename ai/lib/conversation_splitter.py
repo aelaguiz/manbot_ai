@@ -24,10 +24,10 @@ from tenacity import (
 
 import logging
 import logging.config
-logging.getLogger("httpx").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
-logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
+# logging.getLogger("httpx").setLevel(logging.CRITICAL)
+# logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
+# logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
+# logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
 
 """
