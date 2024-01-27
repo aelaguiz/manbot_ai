@@ -38,7 +38,7 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
         return _fast_llm
 
     _fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp)
-    _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30)
+    _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30, model='text-embedding-3-small')
     _db = initialize_db(db_connection_string, record_manager_connection_string)
     # set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 

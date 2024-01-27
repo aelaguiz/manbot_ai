@@ -9,6 +9,12 @@ Try to identify conversations that are most like this one
 Whatsapp conversations
 Discord conversations
 
+Load those then
+
+
+1. Start the conversation, get client talking, try to learn basics. Minimal prompt size here if possible.
+2. Start pattern matching against conversations
+
 
 
 # 1/25

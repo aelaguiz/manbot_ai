@@ -13,6 +13,7 @@ class VideoTranscriptLoader(UnstructuredFileLoader):
 
         # Create metadata dictionary
         metadata = {
+            "type": "video",
             "title": data["title"],
             "source": f"Video {data['video_id']}",
             "video_id": data["video_id"],

@@ -45,6 +45,7 @@ def main():
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=int(2000), chunk_overlap=200, add_start_index=True)
     all_docs = text_splitter.split_documents(docs)
+    logging.info(f"Length of all_docs: {len(all_docs)}"
 
 
 
@@ -59,9 +60,9 @@ def main():
     #     print(f"Adding document title:{metadata['title']} channel:{metadata['channel_id']} start_index:{metadata['start_index']} {len(text)} first 50 chars: {text[:50]}")
     #     print(doc.page_content)
 
-    print(f"Adding {len(all_docs)} documents...")
-    lib_doc_vectors.bulk_add_docs(all_docs)
-    print("Done")
+    # print(f"Adding {len(all_docs)} documents...")
+    # lib_doc_vectors.bulk_add_docs(all_docs)
+    # print("Done")
 
 
 
