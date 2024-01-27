@@ -144,9 +144,20 @@ def _format_doc(doc):
         return _format_wordpress(doc)
     elif doc.metadata['type'] == 'discord':
         return _format_discord(doc)
+    elif doc.metadata['type'] == 'book':
+        return _format_book(doc)
 
     logger = logging.getLogger(__name__)
     logger.error(f"Unknown doc type: {doc.metadata['type']}")
+
+def _format_book(doc):
+    return f"""### Book
+Title: {doc.metadata['title']}
+Author: {doc.metadata['author']}
+
+Summary: \"\"\"
+{doc.page_content}
+\"\"\""""
 
 def _format_wordpress(doc):
     return f"""### Wordpress article

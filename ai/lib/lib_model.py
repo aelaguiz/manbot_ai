@@ -8,7 +8,6 @@ from langchain.vectorstores.pgvector import PGVector
 from langchain.cache import SQLiteCache
 from langchain.globals import set_llm_cache
 import httpx
-import pinecone
 
 _vectordb = None
 _embedding = None
@@ -40,7 +39,7 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
     _fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp)
     _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30, model='text-embedding-3-small')
     _db = initialize_db(db_connection_string, record_manager_connection_string)
-    # set_llm_cache(SQLiteCache(database_path=".langchain.db"))
+    set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 
     _json_fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=0).bind(
         response_format= {
