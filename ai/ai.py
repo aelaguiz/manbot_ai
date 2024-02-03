@@ -66,6 +66,8 @@ def _format_doc(doc):
         return _format_wordpress(doc)
     elif doc.metadata['type'] == 'discord':
         return _format_discord(doc)
+    elif doc.metadata['type'] == 'whatsapp_chat':
+        return _format_whatsapp(doc)
     elif doc.metadata['type'] == 'book':
         return _format_book(doc)
 
@@ -102,6 +104,12 @@ Chat: \"\"\"
 {doc.page_content}
 \"\"\""""
 
+def _format_whatsapp(doc):
+    return f"""### Whatsapp conversation
+Chat: \"\"\"
+{doc.page_content}
+\"\"\""""
+
 def make_retrieval_context(obj):
 
     obj['retrieval_context'] = get_buffer_string(obj['history']) + "\nHuman: " + obj['input']
@@ -112,22 +120,64 @@ def make_retrieval_context(obj):
 def simple_get_chat_reply(user_input):
     logger = logging.getLogger(__name__)
     logger.debug(f"AI: simple_get_chat_reply called with user_input: {user_input}")
-    llm = lib_model.get_json_fast_llm()
+    llm = lib_model.get_fast_llm()
 
-    prompt = ChatPromptTemplate.from_template("{input}")
+    vectordb = lib_model.get_vectordb()
+    retriever = vectordb.as_retriever(search_kwargs={"k": 5})
+
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template("""Your task is to list out each document in the relevant documents below and explain the conclusions/learnings contained in the document and how it is relevant to the user's query:\n\n{relevant_docs}"""),
+        HumanMessagePromptTemplate.from_template("Human: {input}")
+    ])
 
     chain = (
         {
-            "input": RunnablePassthrough()
+            "input": RunnablePassthrough(),
+            "relevant_docs": itemgetter("input") | retriever | format_docs
         }
         | prompt
         | llm
         | StrOutputParser()
     )
 
-    res = chain.invoke({"input": user_input})
+    res = chain.invoke({"input": user_input}, config={'callbacks': [lc_logger.LlmDebugHandler()]})
 
     return res
+
+def get_memory(session_id, chat_id, chat_context=None, initial_messages=None):
+    if chat_context:
+        retrieve_from_db = json.loads(chat_context)
+        retrieved_messages = messages_from_dict(retrieve_from_db)
+        retrieved_chat_history = ChatMessageHistory(messages=retrieved_messages)
+        retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", return_messages=True)
+
+        memory = retrieved_memory
+    else:
+        if initial_messages:
+            translated_messages = []
+
+            for input_message in initial_messages:
+                output_message = {
+                    "type": input_message["type"].lower(),
+                    "data": {
+                        "content": input_message["text"],
+                        "additional_kwargs": {},
+                        "type": input_message["type"].lower(),
+                        "example": False
+                    }
+                }
+
+                translated_messages.append(output_message)
+
+
+            retrieved_chat_history = ChatMessageHistory(messages=messages_from_dict(translated_messages))
+            retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", output_key="output", return_messages=True)
+
+            memory = retrieved_memory
+        else:
+            memory = ConversationBufferMemory(input_key="input", output_key="output", return_messages=True)
+
+    return memory
 
 def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
     """
@@ -152,96 +202,15 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
         llm = lib_model.get_smart_llm()
         lmd = lc_logger.LlmDebugHandler()
         
-        memory = None
-
-        if chat_context:
-            retrieve_from_db = json.loads(chat_context)
-            retrieved_messages = messages_from_dict(retrieve_from_db)
-            retrieved_chat_history = ChatMessageHistory(messages=retrieved_messages)
-            retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", return_messages=True)
-
-            memory = retrieved_memory
-        else:
-            if initial_messages:
-                translated_messages = []
-
-                for input_message in initial_messages:
-                    output_message = {
-                        "type": input_message["type"].lower(),
-                        "data": {
-                            "content": input_message["text"],
-                            "additional_kwargs": {},
-                            "type": input_message["type"].lower(),
-                            "example": False
-                        }
-                    }
-
-                    translated_messages.append(output_message)
-
-
-                retrieved_chat_history = ChatMessageHistory(messages=messages_from_dict(translated_messages))
-                retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", output_key="output", return_messages=True)
-
-                memory = retrieved_memory
-            else:
-                memory = ConversationBufferMemory(input_key="input", output_key="output", return_messages=True)
-
-
-            
-            """
-            [
-                {"type": "human", "data": {"content": "test", "additional_kwargs": {}, "type": "human", "example": false}}, 
-                {"type": "ai", "data": {"content": "AI: How may I assist you with information on modern masculinity and relationships? Please provide a specific question or topic you'd like advice on.", "additional_kwargs": {}, "type": "ai", "example": false}}
-            ]
-            """
+        memory = get_memory(session_id, chat_id, chat_context, initial_messages)
 
         vectordb = lib_model.get_vectordb()
         retriever = vectordb.as_retriever(search_kwargs={"k": 5})
 
-        # docs = vectordb.similarity_search_with_score(user_input, k=5)
-        # for doc, score in docs:
-        #     print(score, _format_doc(doc))
-
-
-
-        # return "", None
-
-
-        # # Initialize the conversation chain and memory buffer for each call
-        # convo = ConversationChain(llm=llm, memory=memory, prompt=chat_template, callbacks=[lmd], verbose=True)
-
-        # # Load or update chat context if provided
-        # if chat_context:
-        #     # Load or update the chat context into the convo object
-        #     # e.g., setting the current state of the conversation
-        #     pass
-
-        # # Process the user input and get a response from the model
-        # res = convo.predict(input=user_input, reference_materials=retriever)
-        # print(res)
-
-        # reply = res  # Adjust based on actual structure of res
-
-        # extracted_messages = convo.memory.chat_memory.messages
-        # ingest_to_db = messages_to_dict(extracted_messages)
-        # new_chat_context = json.dumps(ingest_to_db)
-
-        # print(memory)
-        # print(memory.load_memory_variables({"history": "test"}))
 
         loaded_memory = RunnablePassthrough.assign(
             history=RunnableLambda(memory.load_memory_variables) | itemgetter("history"),
         )
-
-
-        # rc = (
-        #     { 
-        #         'user_input': RunnablePassthrough()
-        #      }
-        #     | retriever
-        # )
-
-        # print(rc.invoke({user_input: user_input}))
 
         chain = (
             loaded_memory 
@@ -277,25 +246,25 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
         new_chat_context = json.dumps(ingest_to_db)
 
 
-        tone_prompt = ChatPromptTemplate.from_messages([
-            SystemMessagePromptTemplate.from_template(prompts.adjust_tone),
-            HumanMessagePromptTemplate.from_template("Coach's reply to transform: ```{input}```")
-        ])
+        # tone_prompt = ChatPromptTemplate.from_messages([
+        #     SystemMessagePromptTemplate.from_template(prompts.adjust_tone),
+        #     HumanMessagePromptTemplate.from_template("Coach's reply to transform: ```{input}```")
+        # ])
 
-        tone_chain = (
-            tone_prompt
-            | llm
-            | StrOutputParser()
-        )
+        # tone_chain = (
+        #     tone_prompt
+        #     | llm
+        #     | StrOutputParser()
+        # )
 
-        tone_adjusted_reply = tone_chain.invoke({"input": reply, "style": prompts.robbies_style}, config={'callbacks': [lmd]})
+        # tone_adjusted_reply = tone_chain.invoke({"input": reply, "style": prompts.robbies_style}, config={'callbacks': [lmd]})
         # print(tone_adjusted_reply)
 
         # print(reply)
         # print(new_chat_context)
 
 
-        return tone_adjusted_reply, new_chat_context
+        return reply, new_chat_context
 
     except Exception as e:
         import traceback
