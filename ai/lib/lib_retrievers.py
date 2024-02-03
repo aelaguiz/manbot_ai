@@ -1,11 +1,17 @@
 import logging
+from langchain_core.callbacks.manager import AsyncCallbackManagerForRetrieverRun
 from pydantic import BaseModel, Field
-from typing import List
+from typing import Any, Coroutine, List
 from datetime import datetime
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain.chains.query_constructor.base import AttributeInfo
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
+from langchain_core.documents import Document
+from langchain_core.vectorstores import VectorStoreRetriever
+from typing import List
 
-logger = logging.getLogger(__name__)
+
 
 
 document_metadata_attributes = [
@@ -16,12 +22,37 @@ document_metadata_attributes = [
 ]
 
 
+class RetrieverWrapper(VectorStoreRetriever):
+    def _aget_relevant_documents(self, query: str, *, run_manager: AsyncCallbackManagerForRetrieverRun) -> Coroutine[Any, Any, List[Document]]:
+
+        logger = logging.getLogger(__name__)
+        # logger.debug(f"RetrieverWrapper: _aget_relevant_documents: {query}")
+        res = super()._aget_relevant_documents(query, run_manager=run_manager)
+        # logger.debug(f"RetrieverWrapper: _aget_relevant_documents: {res}")
+        return res
+    
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> List[Document]:
+        logger = logging.getLogger(__name__)
+        # logger.debug(f"RetrieverWrapper: _get_relevant_documents: {query}")
+        res = super()._get_relevant_documents(query, run_manager=run_manager)
+
+        # logger.debug(f"RetrieverWrapper: _get_relevant_documents: {res}")
+        return res
+
+
+
 def get_retriever(vectorstore, k, source_filter=None, type_filter=None):
     skw = get_search_kwargs(k, source_filter, type_filter)
-    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs=skw)
-    return retriever
+
+    tags = []
+    tags.extend(vectorstore._get_retriever_tags())
+
+    return RetrieverWrapper(vectorstore=vectorstore, search_type="similarity", search_kwargs=skw, tags=tags)
 
 def get_self_query(llm, vectorstore, doc_content_description, k, source_filter=None, type_filter=None):
+    logger = logging.getLogger(__name__)
     skw = get_search_kwargs(k, source_filter, type_filter)
     logger.debug(f"Initializing kwargs", skw)
     sq = SelfQueryRetriever.from_llm(

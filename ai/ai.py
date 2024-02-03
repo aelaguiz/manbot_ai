@@ -33,10 +33,12 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain.tools.retriever import create_retriever_tool
 from langchain.schema import messages_from_dict, messages_to_dict
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
 )
 
+from langchain.callbacks import OpenAICallbackHandler
 
 
 from langchain.agents import OpenAIFunctionsAgent
@@ -72,10 +74,12 @@ chat_template = ChatPromptTemplate.from_messages(
 )
 
 def format_docs(docs):
+    logger = logging.getLogger(__name__)
+    # logger.debug(f"Formatting docs: {docs}")
     res = "\n\n".join([_format_doc(d) for d in docs])
 
     logger = logging.getLogger(__name__)
-    logger.debug(f"Formatted docs: {res}")
+    # logger.debug(f"Formatted docs: {res}")
 
     return res
 
@@ -128,11 +132,18 @@ Chat: \"\"\"
 {doc.page_content}
 \"\"\""""
 
-def make_retrieval_context(obj):
+def debug_chain(obj):
 
-    obj['retrieval_context'] = get_buffer_string(obj['history']) + "\nHuman: " + obj['input']
+    # obj['retrieval_context'] = get_buffer_string(obj['history']) + "\nHuman: " + obj['input']
+    logger = logging.getLogger(__name__)
+    # logger.info(f"Debug chain: {obj}")
 
     return obj
+
+def make_retrieval_context(obj):
+    return get_buffer_string(obj['history']) + "\nHuman: " + obj['input']
+
+    # return obj
 
     
 def simple_get_chat_reply(user_input):
@@ -216,96 +227,107 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     """
     logger = logging.getLogger(__name__)
     logger.debug(f"AI: get_chat_reply called with user_input: {user_input}, session_id: {session_id}, chat_id: {chat_id}, chat_context: {chat_context}")
-    try:
-        llm = lib_model.get_smart_llm()
-        lmd = lc_logger.LlmDebugHandler()
-        
-        memory = get_memory(session_id, chat_id, chat_context, initial_messages)
+    # try:
+    llm = lib_model.get_smart_llm()
+    lmd = lc_logger.LlmDebugHandler()
+    oai = OpenAICallbackHandler()
 
-        vectordb = lib_model.get_vectordb()
-        retriever = vectordb.as_retriever(search_kwargs={"k": 5})
+    memory = get_memory(session_id, chat_id, chat_context, initial_messages)
 
-        agent_prompt = ChatPromptTemplate.from_messages([
-            SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=prompts.agent_prompt)), 
-            MessagesPlaceholder(variable_name='chat_history'),
-            HumanMessagePromptTemplate(prompt=PromptTemplate(input_variables=['input'], template='{input}')),
-            MessagesPlaceholder(variable_name='agent_scratchpad')
-        ])
+    vectordb = lib_model.get_vectordb()
+    whatsapp_retriever = lib_retrievers.get_retriever(vectordb, 3, type_filter="whatsapp_chat")
+    discord_retriever = lib_retrievers.get_retriever(vectordb, 3, type_filter="discord")
 
-
-        book_tool = lib_tools.create_retriever_tool(
-            lib_retrievers.get_retriever(vectordb, 5),
-            "book_search",
-            "Search books",
-        )
-
-        tools = [book_tool]
-        llm_with_tools = llm.bind_tools(tools)
-
-        chain = (
-            memory 
-            | {
-                "input": lambda x: x['input'],
-                "chat_history": lambda x: x['history'],
-                "related_documents": lambda x: x['input'] | retriever | format_docs,
-                "agent_scratchpad": lambda x: format_to_openai_tool_messages(
-                        x["intermediate_steps"]
-                )
-            }
-            | agent_prompt
-            | llm_with_tools
-            | OpenAIToolsAgentOutputParser()
-        )
-        agent_executor = AgentExecutor(agent=chain, tools=tools, callbacks=[lmd])
-
-        main_agent = RunnableWithMessageHistory(
-            agent_executor,
-            # This is needed because in most real world scenarios, a session id is needed
-            # It isn't really used here because we are using a simple in memory ChatMessageHistory
-            lambda session_id: memory.chat_memory,
-            input_messages_key="input",
-            history_messages_key="chat_history",
-        )
-
-        reply = main_agent.invoke({"input": user_input}, config={'callbacks': [lmd]})
-
-        # # extracted_messages = convo.memory.chat_memory.messages
-        # # ingest_to_db = messages_to_dict(extracted_messages)
-        # # new_chat_context = json.dumps(ingest_to_db)
-
-        # # input key outpu tkey ChatMessageHistory
-        # print(memory.outputs)
+    agent_prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=prompts.agent_prompt)), 
+        MessagesPlaceholder(variable_name='chat_history'),
+        HumanMessagePromptTemplate(prompt=PromptTemplate(input_variables=['input'], template='{input}')),
+        MessagesPlaceholder(variable_name='agent_scratchpad')
+    ])
 
 
+    book_tool = lib_tools.create_retriever_tool(
+        lib_retrievers.get_retriever(vectordb, 5, type_filter="book"),
+        "book_search",
+        "Search books",
+    )
 
-        memory.save_context({"input": user_input}, {"output": reply})
+    tools = [book_tool]
+    llm_with_tools = llm.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
 
-        extracted_messages = memory.chat_memory.messages
-        ingest_to_db = messages_to_dict(extracted_messages)
-        new_chat_context = json.dumps(ingest_to_db)
+    runnable_memory = RunnablePassthrough.assign(
+        history=RunnableLambda(memory.load_memory_variables) | itemgetter("history"),
+    )
+
+    chain = (
+        runnable_memory
+        | {
+            "input": lambda x: x['input'],
+            "chat_history": lambda x: x['history'],
+            "related_whatsapp_conversations": make_retrieval_context | whatsapp_retriever | format_docs,
+            "related_discord_conversations": make_retrieval_context | discord_retriever | format_docs,
+            "agent_scratchpad": lambda x: format_to_openai_tool_messages(
+                    x["intermediate_steps"]
+            )
+        }
+        | debug_chain
+        | agent_prompt
+        | llm_with_tools
+        | OpenAIToolsAgentOutputParser()
+    )
+    agent_executor = AgentExecutor(agent=chain, tools=tools, callbacks=[oai])
+
+    # main_agent = RunnableWithMessageHistory(
+    #     agent_executor,
+    #     # This is needed because in most real world scenarios, a session id is needed
+    #     # It isn't really used here because we are using a simple in memory ChatMessageHistory
+    #     lambda session_id: memory.chat_memory,
+    #     input_messages_key="input",
+    #     history_messages_key="chat_history",
+    # )
+
+    logger.debug(f"Invoking agent with user_input: {user_input}")
+    reply = agent_executor.invoke({"input": user_input}, config={'callbacks': [oai]})
+    logger.debug(oai)
+
+    # # extracted_messages = convo.memory.chat_memory.messages
+    # # ingest_to_db = messages_to_dict(extracted_messages)
+    # # new_chat_context = json.dumps(ingest_to_db)
+
+    # # input key outpu tkey ChatMessageHistory
+    # print(memory.outputs)
+    # logger.debug(reply)
 
 
-        # tone_prompt = ChatPromptTemplate.from_messages([
-        #     SystemMessagePromptTemplate.from_template(prompts.adjust_tone),
-        #     HumanMessagePromptTemplate.from_template("Coach's reply to transform: ```{input}```")
-        # ])
 
-        # tone_chain = (
-        #     tone_prompt
-        #     | llm
-        #     | StrOutputParser()
-        # )
+    memory.save_context({"input": user_input}, {"output": reply['output']})
 
-        # tone_adjusted_reply = tone_chain.invoke({"input": reply, "style": prompts.robbies_style}, config={'callbacks': [lmd]})
-        # print(tone_adjusted_reply)
-
-        # print(reply)
-        # print(new_chat_context)
+    extracted_messages = memory.chat_memory.messages
+    ingest_to_db = messages_to_dict(extracted_messages)
+    new_chat_context = json.dumps(ingest_to_db)
 
 
-        return reply, new_chat_context
+    # tone_prompt = ChatPromptTemplate.from_messages([
+    #     SystemMessagePromptTemplate.from_template(prompts.adjust_tone),
+    #     HumanMessagePromptTemplate.from_template("Coach's reply to transform: ```{input}```")
+    # ])
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise ChatError(f"Failed to process chat: {str(e)}")
+    # tone_chain = (
+    #     tone_prompt
+    #     | llm
+    #     | StrOutputParser()
+    # )
+
+    # tone_adjusted_reply = tone_chain.invoke({"input": reply, "style": prompts.robbies_style}, config={'callbacks': [lmd]})
+    # print(tone_adjusted_reply)
+
+    # print(reply)
+    # print(new_chat_context)
+
+
+    return reply['output'], new_chat_context
+
+    # except Exception as e:
+    #     import traceback
+    #     traceback.print_exc()
+    #     raise ChatError(f"Failed to process chat: {str(e)}")

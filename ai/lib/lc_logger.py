@@ -33,7 +33,7 @@ class LlmDebugHandler(BaseCallbackHandler):
         """Print out the token."""
         try:
             logger = logging.getLogger(__name__)
-            logger.debug(f"LLM Token: {token}")
+            # logger.debug(f"LLM Token: {token}")
         except Exception as e:
             logger.error(f"An error occurred in on_llm_new_token: {e}")
 
