@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-from ai import __version__
+from ai.version import __version__
 
 setup(
     name='ai',  # Change to your library's name
