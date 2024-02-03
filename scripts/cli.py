@@ -33,6 +33,7 @@ logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
 logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
 from ai.lib import lib_model, lc_logger, lib_conversation
+from prompt_toolkit.history import FileHistory
 
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ def process_command(user_input, chat_context, initial_messages):
 def main():
     lib_conversation.init_conversation()
     bindings = KeyBindings()
+    history = FileHistory('./gpt_prompt_history.txt')  # specify the path to your history file
 
     initial_messages = [{
         "type": "ai",
@@ -80,7 +82,7 @@ def main():
             try:
                 if not multiline:
                     # Single-line input mode
-                    line = prompt('Human: ', key_bindings=bindings)
+                    line = prompt('Human: ', key_bindings=bindings, history=history)
                     if line.strip() == '"""':
                         multiline = True
                         continue
@@ -91,7 +93,7 @@ def main():
                         break
                 else:
                     # Multiline input mode
-                    line = prompt('... ', multiline=True, key_bindings=bindings)
+                    line = prompt('... ', multiline=True, key_bindings=bindings, history=history)
                     chat_context = process_command(line, chat_context, initial_messages)
                     multiline = False
             except EOFError:

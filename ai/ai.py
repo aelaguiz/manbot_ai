@@ -32,6 +32,11 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain.tools.retriever import create_retriever_tool
 from langchain.schema import messages_from_dict, messages_to_dict
+from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
+from langchain.agents.format_scratchpad.openai_tools import (
+    format_to_openai_tool_messages,
+)
+
 
 
 from langchain.agents import OpenAIFunctionsAgent
@@ -220,63 +225,49 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
         vectordb = lib_model.get_vectordb()
         retriever = vectordb.as_retriever(search_kwargs={"k": 5})
 
-
-        loaded_memory = RunnablePassthrough.assign(
-            history=RunnableLambda(memory.load_memory_variables) | itemgetter("history"),
-        )
-
-        # chain = (
-        #     loaded_memory 
-        #     | {
-        #         'input': lambda x: x['input'], 
-        #         'history': lambda x: x["history"],
-        #      }
-        #      | make_retrieval_context
-        #     | {
-        #         'input': lambda x: x['input'],
-        #         'history': lambda x: x['history'],
-        #         'reference_materials': itemgetter("retrieval_context") | retriever | format_docs,
-        #     }
-        #     | chat_template
-        #     | llm
-        #     | StrOutputParser()
-        # )
-        # print(chain)
         agent_prompt = ChatPromptTemplate.from_messages([
-            SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=agent_prompt)), 
+            SystemMessagePromptTemplate(prompt=PromptTemplate(input_variables=[], template=prompts.agent_prompt)), 
             MessagesPlaceholder(variable_name='chat_history'),
             HumanMessagePromptTemplate(prompt=PromptTemplate(input_variables=['input'], template='{input}')),
             MessagesPlaceholder(variable_name='agent_scratchpad')
         ])
 
 
-        chat_history = ChatMessageHistory(messages=messages_from_dict(translated_messages))
-        memory = ConversationBufferMemory(chat_memory=chat_history, input_key="input", memory_key="history", return_messages=True)
-
         book_tool = lib_tools.create_retriever_tool(
-            lib_retrievers.get_retriever(db, 5, source_filter="epub"),
+            lib_retrievers.get_retriever(vectordb, 5),
             "book_search",
             "Search books",
         )
 
         tools = [book_tool]
-        agent = OpenAIFunctionsAgent(
-            llm= llm,
-            prompt=agent_prompt,
-            tools=tools
+        llm_with_tools = llm.bind_tools(tools)
+
+        chain = (
+            memory 
+            | {
+                "input": lambda x: x['input'],
+                "chat_history": lambda x: x['history'],
+                "related_documents": lambda x: x['input'] | retriever | format_docs,
+                "agent_scratchpad": lambda x: format_to_openai_tool_messages(
+                        x["intermediate_steps"]
+                )
+            }
+            | agent_prompt
+            | llm_with_tools
+            | OpenAIToolsAgentOutputParser()
         )
-        agent_executor = AgentExecutor(agent=agent, tools=tools, callbacks=[lmd])
+        agent_executor = AgentExecutor(agent=chain, tools=tools, callbacks=[lmd])
 
         main_agent = RunnableWithMessageHistory(
             agent_executor,
             # This is needed because in most real world scenarios, a session id is needed
             # It isn't really used here because we are using a simple in memory ChatMessageHistory
-            lambda session_id: chat_history,
+            lambda session_id: memory.chat_memory,
             input_messages_key="input",
             history_messages_key="chat_history",
         )
 
-        reply = chain.invoke({"input": user_input}, config={'callbacks': [lmd]})
+        reply = main_agent.invoke({"input": user_input}, config={'callbacks': [lmd]})
 
         # # extracted_messages = convo.memory.chat_memory.messages
         # # ingest_to_db = messages_to_dict(extracted_messages)

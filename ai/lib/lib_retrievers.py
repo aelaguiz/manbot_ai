@@ -2,7 +2,6 @@ import logging
 from pydantic import BaseModel, Field
 from typing import List
 from datetime import datetime
-from .time_weighted_retriever import EnhancedTimeWeightedRetriever
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain.chains.query_constructor.base import AttributeInfo
 
@@ -21,14 +20,6 @@ def get_retriever(vectorstore, k, source_filter=None, type_filter=None):
     skw = get_search_kwargs(k, source_filter, type_filter)
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs=skw)
     return retriever
-
-def get_time_weighted(vectorstore, k, source_filter=None, type_filter=None):
-    tw_retriever = EnhancedTimeWeightedRetriever(
-        vectorstore=vectorstore, decay_rate=0.80, k=k, search_kwargs=get_search_kwargs(k, source_filter, type_filter)
-    )
-
-    return tw_retriever
-
 
 def get_self_query(llm, vectorstore, doc_content_description, k, source_filter=None, type_filter=None):
     skw = get_search_kwargs(k, source_filter, type_filter)
