@@ -39,6 +39,7 @@ class WhatsAppChatLoader(UnstructuredFileLoader):
                 parsed_timestamp = datetime.strptime(timestamp_str, '%m/%d/%y, %I:%M:%S %p')
                 current_msg = {
                     "number": message_number,
+                    'message_type': 'whatsapp',
                     "timestamp": parsed_timestamp,
                     "user": user,
                     "message": message

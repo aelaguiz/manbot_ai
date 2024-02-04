@@ -42,6 +42,7 @@ class DiscordChatLoader(UnstructuredFileLoader):
                 parsed_timestamp = datetime.fromisoformat(timestamp_str)
                 current_msg = {
                     "number": message_number,
+                    'message_type': 'discord',
                     "timestamp": parsed_timestamp,
                     "user": user,
                     "message": message
