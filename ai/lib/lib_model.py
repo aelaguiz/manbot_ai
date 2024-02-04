@@ -7,6 +7,7 @@ from langchain.cache import SQLiteCache
 from langchain.vectorstores.pgvector import PGVector
 from langchain.cache import SQLiteCache
 from langchain.globals import set_llm_cache
+from langchain.callbacks import OpenAICallbackHandler
 import httpx
 
 _vectordb = None
@@ -19,6 +20,7 @@ _json_smart_llm = None
 _embedding = None
 _db = None
 _record_manager = None
+_oai = OpenAICallbackHandler()
 
 def init(smart_model_name, fast_model_name, api_key, db_connection_string, record_manager_connection_string, temp=0.5):
     global _fast_llm
@@ -53,6 +55,9 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
             "type": "json_object"
         }
     )
+
+def get_oai():
+    return _oai
 
 def get_embedding_fn():
     global _embedding

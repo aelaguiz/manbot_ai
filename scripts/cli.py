@@ -42,7 +42,7 @@ CONNECTION_STRING = os.getenv("PGVECTOR_CONNECTION_STRING")
 RECORDMANAGER_CONNECTION_STRING = os.getenv("RECORDMANAGER_CONNECTION_STRING")
 
 
-init(os.getenv("SMART_OPENAI_MODEL"), os.getenv("SMART_OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), CONNECTION_STRING, RECORDMANAGER_CONNECTION_STRING, temp=os.getenv("OPENAI_TEMPERATURE"))
+init(os.getenv("SMART_OPENAI_MODEL"), os.getenv("FAST_OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), CONNECTION_STRING, RECORDMANAGER_CONNECTION_STRING, temp=os.getenv("OPENAI_TEMPERATURE"))
 
 
 def process_command(user_input, chat_context, initial_messages):
@@ -64,10 +64,7 @@ def main():
     bindings = KeyBindings()
     history = FileHistory('./gpt_prompt_history.txt')  # specify the path to your history file
 
-    initial_messages = [{
-        "type": "ai",
-        "text": "Hey! Let's start with the basics. Are you looking for help with a specific girl or are you looking for more general advice?"
-    }]
+    initial_messages = []
 
     chat_context = None
 

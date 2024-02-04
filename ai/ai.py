@@ -38,7 +38,6 @@ from langchain.agents.format_scratchpad.openai_tools import (
     format_to_openai_tool_messages,
 )
 
-from langchain.callbacks import OpenAICallbackHandler
 
 
 from langchain.agents import OpenAIFunctionsAgent
@@ -51,7 +50,7 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 import json
 import logging
 
-from .lib import lib_model, lc_logger, prompts, lib_tools, lib_retrievers
+from .lib import lib_model, lc_logger, prompts, lib_tools, lib_retrievers, lib_formatters
 
 class ChatError(Exception):
     """
@@ -73,64 +72,6 @@ chat_template = ChatPromptTemplate.from_messages(
     ]
 )
 
-def format_docs(docs):
-    logger = logging.getLogger(__name__)
-    # logger.debug(f"Formatting docs: {docs}")
-    res = "\n\n".join([_format_doc(d) for d in docs])
-
-    logger = logging.getLogger(__name__)
-    # logger.debug(f"Formatted docs: {res}")
-
-    return res
-
-def _format_doc(doc):
-    if doc.metadata['type'] == 'wordpress':
-        return _format_wordpress(doc)
-    elif doc.metadata['type'] == 'discord':
-        return _format_discord(doc)
-    elif doc.metadata['type'] == 'whatsapp_chat':
-        return _format_whatsapp(doc)
-    elif doc.metadata['type'] == 'book':
-        return _format_book(doc)
-
-    logger = logging.getLogger(__name__)
-    logger.error(f"Unknown doc type: {doc.metadata['type']}")
-
-def _format_book(doc):
-    return f"""### Book
-Title: {doc.metadata['title']}
-Author: {doc.metadata['author']}
-
-Summary: \"\"\"
-{doc.page_content}
-\"\"\""""
-
-def _format_wordpress(doc):
-    return f"""### Wordpress article
-Title: {doc.metadata['title']}
-Author: {doc.metadata['author']}
-URL: {doc.metadata['url']}
-
-Text: \"\"\"
-{doc.page_content}
-\"\"\""""
-
-def _format_discord(doc):
-    return f"""### Discord message
-Topic: {doc.metadata['title']}
-Filename: {doc.metadata['filename']}
-Participant: {doc.metadata['participants']}
-Timestamp: {doc.metadata['timestamp']}
-
-Chat: \"\"\"
-{doc.page_content}
-\"\"\""""
-
-def _format_whatsapp(doc):
-    return f"""### Whatsapp conversation
-Chat: \"\"\"
-{doc.page_content}
-\"\"\""""
 
 def debug_chain(obj):
 
@@ -149,7 +90,7 @@ def make_retrieval_context(obj):
 def simple_get_chat_reply(user_input):
     logger = logging.getLogger(__name__)
     logger.debug(f"AI: simple_get_chat_reply called with user_input: {user_input}")
-    llm = lib_model.get_fast_llm()
+    llm = lib_model.get_smart_llm()
 
     vectordb = lib_model.get_vectordb()
     retriever = vectordb.as_retriever(search_kwargs={"k": 5})
@@ -162,7 +103,7 @@ def simple_get_chat_reply(user_input):
     chain = (
         {
             "input": RunnablePassthrough(),
-            "relevant_docs": itemgetter("input") | retriever | format_docs
+            "relevant_docs": itemgetter("input") | retriever | lib_formatters.format_docs
         }
         | prompt
         | llm
@@ -230,7 +171,6 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     # try:
     llm = lib_model.get_smart_llm()
     lmd = lc_logger.LlmDebugHandler()
-    oai = OpenAICallbackHandler()
 
     memory = get_memory(session_id, chat_id, chat_context, initial_messages)
 
@@ -252,20 +192,30 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
         "Search books",
     )
 
-    tools = [book_tool]
+    whatsapp_tool = lib_tools.create_retriever_tool(
+        lib_retrievers.get_retriever(vectordb, 5, type_filter="whatsapp_chat"),
+        "coaching_search",
+        "Find coaching conversations with Robbie Kramer that are relevant to this user's challenges. Past in the chat history with the client including the latest prompt.",
+    )
+
+    style_tool = lib_tools.create_style_tool()
+
+    tools = [book_tool, whatsapp_tool]
     llm_with_tools = llm.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
 
     runnable_memory = RunnablePassthrough.assign(
         history=RunnableLambda(memory.load_memory_variables) | itemgetter("history"),
     )
 
+    # "related_whatsapp_conversations": make_retrieval_context | whatsapp_retriever | format_docs,
+    # "related_discord_conversations": make_retrieval_context | discord_retriever | format_docs,
+
+    oai = lib_model.get_oai()
     chain = (
         runnable_memory
         | {
             "input": lambda x: x['input'],
             "chat_history": lambda x: x['history'],
-            "related_whatsapp_conversations": make_retrieval_context | whatsapp_retriever | format_docs,
-            "related_discord_conversations": make_retrieval_context | discord_retriever | format_docs,
             "agent_scratchpad": lambda x: format_to_openai_tool_messages(
                     x["intermediate_steps"]
             )
@@ -275,7 +225,7 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
         | llm_with_tools
         | OpenAIToolsAgentOutputParser()
     )
-    agent_executor = AgentExecutor(agent=chain, tools=tools, callbacks=[oai])
+    agent_executor = AgentExecutor(agent=chain, tools=tools, callbacks=[oai], verbose=True)
 
     # main_agent = RunnableWithMessageHistory(
     #     agent_executor,
@@ -287,7 +237,7 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     # )
 
     logger.debug(f"Invoking agent with user_input: {user_input}")
-    reply = agent_executor.invoke({"input": user_input}, config={'callbacks': [oai]})
+    reply = agent_executor.invoke({"input": user_input}, config={'callbacks': [oai, lmd]})
     logger.debug(oai)
 
     # # extracted_messages = convo.memory.chat_memory.messages
@@ -299,33 +249,20 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     # logger.debug(reply)
 
 
+    res2 = style_tool.invoke({"chat_history": user_input, "message": reply['output']}, config={'callbacks': [lmd]})
 
-    memory.save_context({"input": user_input}, {"output": reply['output']})
+    logger.debug(f"STYLE TOOL: {res2}")
+
+
+    memory.save_context({"input": user_input}, {"output": res2})
 
     extracted_messages = memory.chat_memory.messages
     ingest_to_db = messages_to_dict(extracted_messages)
     new_chat_context = json.dumps(ingest_to_db)
 
 
-    # tone_prompt = ChatPromptTemplate.from_messages([
-    #     SystemMessagePromptTemplate.from_template(prompts.adjust_tone),
-    #     HumanMessagePromptTemplate.from_template("Coach's reply to transform: ```{input}```")
-    # ])
 
-    # tone_chain = (
-    #     tone_prompt
-    #     | llm
-    #     | StrOutputParser()
-    # )
-
-    # tone_adjusted_reply = tone_chain.invoke({"input": reply, "style": prompts.robbies_style}, config={'callbacks': [lmd]})
-    # print(tone_adjusted_reply)
-
-    # print(reply)
-    # print(new_chat_context)
-
-
-    return reply['output'], new_chat_context
+    return res2, new_chat_context
 
     # except Exception as e:
     #     import traceback
