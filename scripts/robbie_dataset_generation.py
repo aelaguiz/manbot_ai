@@ -233,7 +233,7 @@ def format_training_samples(training_samples):
         for a in sample['y']['replies']:
             answers.append(f"{a['message']}")
 
-        yield TrainingExample(chats="\n".join(qs), answer="\n".join(answers))
+        yield TrainingExample(chats="\n".join(qs), answer="\n".join(answers)).with_inputs("chats")
 
 
 class AssessResponse(dspy.Signature):
@@ -244,6 +244,8 @@ class AssessResponse(dspy.Signature):
     assessment_answer = dspy.OutputField(desc="Yes or No")
 
 turbo = dspy.OpenAI(model=os.getenv("FAST_OPENAI_MODEL"), api_key=os.getenv("OPENAI_API_KEY"))
+gpt4 = dspy.OpenAI(model=os.getenv("SMART_OPENAI_MODEL"), api_key=os.getenv("OPENAI_API_KEY"))
+
 dspy.settings.configure(lm=turbo)
 
 def metric(example, pred, trace=None):
@@ -291,6 +293,7 @@ def main():
     
     training_samples = list(generate_training_samples(conversations))
     random.shuffle(training_samples)
+    training_samples = training_samples[:100]
     logging.debug(f"Got {len(training_samples)} training samples.")
 
     # for sample in training_samples:
@@ -310,8 +313,14 @@ def main():
     
     model = RobbieReply(num_chats=3)
 
+    from dspy.teleprompt import BootstrapFewShotWithRandomSearch, BootstrapFewShot
+    
+    optimizer = BootstrapFewShotWithRandomSearch(metric=metric, num_threads=4, num_candidate_programs=3, max_bootstrapped_demos=3, teacher_settings=dict(lm=gpt4))
+    compiled_model = optimizer.compile(model, trainset=train_set, valset=validate_set)
+
+
     for t in train_set[:3]:
-        res = model(chats=t.chats)
+        res = compiled_model(chats=t.chats)
         # logging.debug(f"Client Chat: {t.chats}")
         # logging.debug("\n\n")
         # logging.debug(f"Robbie's Actual reply: {train_set[1].answer}")
@@ -321,6 +330,7 @@ def main():
 
         score = metric(t, res)
         logging.debug(f"Score: {score}")
+
 
     # import dspy.teleprompt
     # tp = dspy.teleprompt.BootstrapFewShot(
