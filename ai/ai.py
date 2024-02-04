@@ -18,7 +18,7 @@ from operator import itemgetter
 
 from langchain.callbacks.tracers import ConsoleCallbackHandler
 
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferMemory, ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string
@@ -119,7 +119,7 @@ def get_memory(session_id, chat_id, chat_context=None, initial_messages=None):
         retrieve_from_db = json.loads(chat_context)
         retrieved_messages = messages_from_dict(retrieve_from_db)
         retrieved_chat_history = ChatMessageHistory(messages=retrieved_messages)
-        retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", return_messages=True)
+        retrieved_memory = ConversationBufferWindowMemory(chat_memory=retrieved_chat_history, input_key="input", return_messages=True, k=10)
 
         memory = retrieved_memory
     else:
@@ -141,11 +141,11 @@ def get_memory(session_id, chat_id, chat_context=None, initial_messages=None):
 
 
             retrieved_chat_history = ChatMessageHistory(messages=messages_from_dict(translated_messages))
-            retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", output_key="output", return_messages=True)
+            retrieved_memory = ConversationBufferWindowMemory(chat_memory=retrieved_chat_history, input_key="input", output_key="output", return_messages=True, k=10)
 
             memory = retrieved_memory
         else:
-            memory = ConversationBufferMemory(input_key="input", output_key="output", return_messages=True)
+            memory = ConversationBufferWindowMemory(input_key="input", output_key="output", return_messages=True, k=10)
 
     return memory
 
