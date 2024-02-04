@@ -22,11 +22,16 @@ class WhatsAppChatLoader(UnstructuredFileLoader):
         # Define a regular expression to match the WhatsApp chat structure
         pattern = re.compile(r'\[(\d{1,2}/\d{1,2}/\d{2}, \d{1,2}:\d{2}:\d{2}\s[AP]M)\]\s(.*?):\s(.*)')
 
+        unicode_cleaner = re.compile(r'[\u200e\u200f\u202a-\u202e]')
+
+
         messages = []
         message_number = 1
         current_msg = None
 
         for line in content:
+            line = unicode_cleaner.sub('', line)
+
             match = pattern.match(line)
             if match:
                 if current_msg:
