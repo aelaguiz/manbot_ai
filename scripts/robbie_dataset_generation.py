@@ -293,7 +293,7 @@ def main():
     
     training_samples = list(generate_training_samples(conversations))
     random.shuffle(training_samples)
-    training_samples = training_samples[:100]
+    training_samples = training_samples[:50]
     logging.debug(f"Got {len(training_samples)} training samples.")
 
     # for sample in training_samples:
@@ -315,8 +315,9 @@ def main():
 
     from dspy.teleprompt import BootstrapFewShotWithRandomSearch, BootstrapFewShot
     
-    optimizer = BootstrapFewShotWithRandomSearch(metric=metric, num_threads=4, num_candidate_programs=3, max_bootstrapped_demos=3, teacher_settings=dict(lm=gpt4))
+    optimizer = BootstrapFewShotWithRandomSearch(metric=metric, num_threads=4, num_candidate_programs=2, max_bootstrapped_demos=2, teacher_settings=dict(lm=gpt4))
     compiled_model = optimizer.compile(model, trainset=train_set, valset=validate_set)
+    compiled_model.save("robbie_reply_model.json")
 
 
     for t in train_set[:3]:
