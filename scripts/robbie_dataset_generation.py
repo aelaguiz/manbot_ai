@@ -33,6 +33,10 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Dict
 from sklearn.model_selection import train_test_split
 
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
+logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
 def ensure_aware(datetime_obj):
     """Ensure a datetime object is offset-aware, assuming UTC if it's naive."""
@@ -116,57 +120,62 @@ def filter_conversations_for_robbie(conversations):
     return convos
 
 
-def generate_training_samples(conversations):
+def generate_training_samples(messages):
+    for msg in messages:
+        msg["timestamp"] = ensure_aware(msg["timestamp"])
+
+    # # Now, sort messages by their timestamp to ensure they're in chronological order
+    messages.sort(key=lambda msg: msg["timestamp"])
+
     training_samples = []
 
-    for idx, conversation in enumerate(conversations):
-        speakers = set()  # Track unique speakers
-        context = []  # Initialize context for accumulating messages
-        current_sample = {'X': [], 'y': {'number_of_replies': 0, 'replies': []}}
-        robbie_replied = False
-        last_speaker = None  # Keep track of the last speaker
+    speakers = set()  # Track unique speakers
+    context = []  # Initialize context for accumulating messages
+    current_sample = {'X': [], 'y': {'number_of_replies': 0, 'replies': []}}
+    robbie_replied = False
+    last_speaker = None  # Keep track of the last speaker
 
-        # logging.debug(f"Starting conversation {idx+1} with {len(conversation)} messages")
+    # logging.debug(f"Starting conversation {idx+1} with {len(conversation)} messages")
 
-        for message_idx, message in enumerate(conversation):
-            # Normalize Robbie's user name
-            if message['user'] in ['Robbie Kramer', 'robbiekramer']:
-                normalized_user = 'Robbie'
+    for message_idx, message in enumerate(messages):
+        # Normalize Robbie's user name
+        if message['user'] in ['Robbie Kramer', 'robbiekramer']:
+            normalized_user = 'Robbie'
+        else:
+            normalized_user = f"Client [{message['user']}]"
+        message['user'] = normalized_user  # Apply normalization
+
+        # logging.debug(f"Message {message_idx+1}: '{message['message']}' from {normalized_user}")
+
+        speakers.add(normalized_user)
+
+        if normalized_user == 'Robbie':
+            robbie_replied = True
+            current_sample['y']['replies'].append(message)
+            current_sample['y']['number_of_replies'] += 1
+            # logging.debug(f"Robbie replied. Total replies: {current_sample['y']['number_of_replies']}")
+        else:  # Message from a client
+            if robbie_replied and (last_speaker == 'Robbie' or len(speakers) > 2):
+                # logging.debug("Transition detected. Finalizing current sample and starting a new one.")
+                training_samples.append(current_sample) if current_sample['X'] else None
+                # logging.debug(f"Sample finalized with {len(current_sample['X'])} messages and {current_sample['y']['number_of_replies']} replies.")
+                # Reset for a new conversation sample
+                context = [message]  # Start with the current message as context
+                current_sample = {'X': list(context), 'y': {'number_of_replies': 0, 'replies': []}}
+                robbie_replied = False
+                speakers = {normalized_user}  # Reset speakers for the new sample
             else:
-                normalized_user = f"Client [{message['user']}]"
-            message['user'] = normalized_user  # Apply normalization
+                # Accumulate context for ongoing conversation
+                context.append(message)
+                current_sample['X'].append(message)
+            # logging.debug(f"Context updated with {len(current_sample['X'])} messages.")
 
-            # logging.debug(f"Message {message_idx+1}: '{message['message']}' from {normalized_user}")
+        last_speaker = normalized_user  # Update the last speaker
 
-            speakers.add(normalized_user)
-
-            if normalized_user == 'Robbie':
-                robbie_replied = True
-                current_sample['y']['replies'].append(message)
-                current_sample['y']['number_of_replies'] += 1
-                # logging.debug(f"Robbie replied. Total replies: {current_sample['y']['number_of_replies']}")
-            else:  # Message from a client
-                if robbie_replied and (last_speaker == 'Robbie' or len(speakers) > 2):
-                    # logging.debug("Transition detected. Finalizing current sample and starting a new one.")
-                    training_samples.append(current_sample) if current_sample['X'] else None
-                    # logging.debug(f"Sample finalized with {len(current_sample['X'])} messages and {current_sample['y']['number_of_replies']} replies.")
-                    # Reset for a new conversation sample
-                    context = [message]  # Start with the current message as context
-                    current_sample = {'X': list(context), 'y': {'number_of_replies': 0, 'replies': []}}
-                    robbie_replied = False
-                    speakers = {normalized_user}  # Reset speakers for the new sample
-                else:
-                    # Accumulate context for ongoing conversation
-                    context.append(message)
-                    current_sample['X'].append(message)
-                # logging.debug(f"Context updated with {len(current_sample['X'])} messages.")
-
-            last_speaker = normalized_user  # Update the last speaker
-
-        # Check and add the last sample if it ends with Robbie's replies
-        if current_sample['X'] and (robbie_replied and len(speakers) <= 2):
-            training_samples.append(current_sample)
-            # logging.debug(f"Final sample added from conversation {idx+1} with {len(current_sample['X'])} messages and {current_sample['y']['number_of_replies']} replies.")
+    # Check and add the last sample if it ends with Robbie's replies
+    if current_sample['X'] and (robbie_replied and len(speakers) <= 2):
+        training_samples.append(current_sample)
+        # logging.debug(f"Final sample added from conversation {idx+1} with {len(current_sample['X'])} messages and {current_sample['y']['number_of_replies']} replies.")
 
     # logging.debug(f"Total training samples generated: {len(training_samples)}")
     return training_samples
@@ -248,32 +257,51 @@ gpt4 = dspy.OpenAI(model=os.getenv("SMART_OPENAI_MODEL"), api_key=os.getenv("OPE
 
 dspy.settings.configure(lm=turbo)
 
-def metric(example, pred, trace=None):
+def robbie_style_score(example, pred, trace=None):
     tone = "Does the answer sound like Robbie in terms of tone? In particular, does the message start the way he would start a message?"
-    format = "Is the answer formatted like Robbie's?"
-    content = "Is the content of the answer similar to Robbie's?"
-    length = "Is the length of the answer similar to Robbie's?"
+    format = "Is the answer formatted like Robbie's, including punctuation, emojis, and capitalization?"
+    diction = "Does the answer use language, slang, and phrases that Robbie would typically use?"
+    personalization = "Does the answer include personal touches or specific references that Robbie would likely include?"
+    length = "Does the length of the answer match what is typical for Robbie, considering both brevity and detail?"
 
-    
     with dspy.context(lm=turbo):
         t_res = dspy.Predict(AssessResponse)(chats=example.chats, generated_answer=pred.answer, actual_answer=example.answer, assessment_question=tone)
         f_res = dspy.Predict(AssessResponse)(chats=example.chats, generated_answer=pred.answer, actual_answer=example.answer, assessment_question=format)
-        c_res = dspy.Predict(AssessResponse)(chats=example.chats, generated_answer=pred.answer, actual_answer=example.answer, assessment_question=content)
+        d_res = dspy.Predict(AssessResponse)(chats=example.chats, generated_answer=pred.answer, actual_answer=example.answer, assessment_question=diction)
+        p_res = dspy.Predict(AssessResponse)(chats=example.chats, generated_answer=pred.answer, actual_answer=example.answer, assessment_question=personalization)
         l_res = dspy.Predict(AssessResponse)(chats=example.chats, generated_answer=pred.answer, actual_answer=example.answer, assessment_question=length)
 
-        
-    t_score, f_score, c_score, l_score = [m.assessment_answer.split()[0].lower() == 'yes' for m in [t_res, f_res, c_res, l_res]]
-    score = (t_score + f_score + c_score + l_score)
-    
+    # Evaluating scores based on 'yes' responses indicating alignment with Robbie's style
+    t_score, f_score, d_score, p_score, l_score = [m.assessment_answer.split()[0].lower() == 'yes' for m in [t_res, f_res, d_res, p_res, l_res]]
+    score = (t_score + f_score + d_score + p_score + (l_score * 2))
+    score /= 6.0
 
     logging.debug(f"Chats: {example.chats}")
     logging.debug(f"Actual result: {example.answer}")
     logging.debug(f"Model result: {pred.answer}")
-    logging.debug(f"Assessment results: tone = {t_res.assessment_answer}, format = {f_res.assessment_answer}, content = {c_res.assessment_answer}, length = {l_res.assessment_answer}")
+    logging.debug(f"Assessment results: tone = {t_res.assessment_answer}, format = {f_res.assessment_answer}, diction = {d_res.assessment_answer}, personalization = {p_res.assessment_answer}, length = {l_res.assessment_answer}")
     logging.debug(f"Score = {score}")
 
     return score
-    
+ 
+def filter_training_samples(samples):
+    filtered_samples = []
+    for sample in samples:
+        # Check for Robbie's involvement in the replies
+        robbie_involved = any('Robbie' in reply['user'] for reply in sample['y']['replies'])
+
+        # Check each message in 'X' and 'y' for 'image omitted'
+        image_omitted_in_X = any('image omitted' in message['message'] for message in sample['X'])
+        image_omitted_in_y = any('image omitted' in reply['message'] for reply in sample['y']['replies'])
+
+        audio_omitted_in_X = any('audio omitted' in message['message'] for message in sample['X'])
+        audio_omitted_in_y = any('audio omitted' in reply['message'] for reply in sample['y']['replies'])
+
+        # Add the sample if Robbie is involved and 'image omitted' is not present
+        if robbie_involved and not (image_omitted_in_X or image_omitted_in_y or audio_omitted_in_X or audio_omitted_in_y):
+            filtered_samples.append(sample)
+
+    return filtered_samples
 
 def main():
     whatsapp_path = sys.argv[1]
@@ -284,53 +312,58 @@ def main():
 
     all_messages = get_all_messages(whatsapp_path, discord_path)
 
-    conversations = split_into_conversations(all_messages, 120)
-    logging.debug(f"Split into {len(conversations)} conversations.")
+    # conversations = split_into_conversations(all_messages, 120)
+    # logging.debug(f"Split into {len(conversations)} conversations.")
 
-    conversations = filter_conversations_for_robbie(conversations)
-    logging.debug(f"Got {len(conversations)} conversations with Robbie.")
+    # conversations = filter_conversations_for_robbie(conversations)
+    # logging.debug(f"Got {len(conversations)} conversations with Robbie.")
 
     
-    training_samples = list(generate_training_samples(conversations))
+    training_samples = filter_training_samples(generate_training_samples(all_messages))
     random.shuffle(training_samples)
-    training_samples = training_samples[:50]
+    training_samples = training_samples[:100]
     logging.debug(f"Got {len(training_samples)} training samples.")
 
-    # for sample in training_samples:
-    #     logging.debug("Question:")
-    #     for q in sample['X']:
-    #         logging.debug(f"\t{q['timestamp']} {q['user']}: {q['message']}")
+    for sample in training_samples:
+        logging.debug("Question:")
+        for q in sample['X']:
+            logging.debug(f"\t{q['timestamp']} {q['user']}: {q['message']}")
 
-    #     logging.debug("Answer:")
-    #     for a in sample['y']['replies']:
-    #         logging.debug(f"\t{a['timestamp']} {a['user']}: {a['message']}")
+        logging.debug("Answer:")
+        for a in sample['y']['replies']:
+            logging.debug(f"\t{a['timestamp']} {a['user']}: {a['message']}")
 
-    #     logging.debug("\n\n")
+        logging.debug("\n\n")
 
     dspy_samples = list(format_training_samples(training_samples))
 
     train_set, validate_set, test_set = split_dataset(dspy_samples, 0.6, 0.2, 0.2)
     
     model = RobbieReply(num_chats=3)
+    model.load("robbie_reply_model.json")
 
     from dspy.teleprompt import BootstrapFewShotWithRandomSearch, BootstrapFewShot
+    from dspy.evaluate import Evaluate
+
+    evaluator = Evaluate(devset=test_set, num_threads=4, display_progress=True, display_table=False, metric=robbie_style_score)
+
+    # avg_score = evaluator(model)
+    # logging.info(f"BEFORE OPTIMIZATION EVALUATION: {avg_score}")
     
-    optimizer = BootstrapFewShotWithRandomSearch(metric=metric, num_threads=4, num_candidate_programs=2, max_bootstrapped_demos=2, teacher_settings=dict(lm=gpt4))
-    compiled_model = optimizer.compile(model, trainset=train_set, valset=validate_set)
-    compiled_model.save("robbie_reply_model.json")
+    compiled_model = model
+    # optimizer = BootstrapFewShotWithRandomSearch(metric=robbie_style_score, num_threads=8, num_candidate_programs=3, max_bootstrapped_demos=3, teacher_settings=dict(lm=gpt4))
+    # compiled_model = optimizer.compile(model, trainset=train_set, valset=validate_set)
+    # compiled_model.save("robbie_reply_model.json")
 
+    avg_score = evaluator(compiled_model)
+    logging.info(f"AFTER OPTIMIZATION EVALUATION: {avg_score}")
 
-    for t in train_set[:3]:
+    logging.debug("TESTING THE MODEL")
+
+    for t in test_set:
         res = compiled_model(chats=t.chats)
-        # logging.debug(f"Client Chat: {t.chats}")
-        # logging.debug("\n\n")
-        # logging.debug(f"Robbie's Actual reply: {train_set[1].answer}")
-        # logging.debug(f"Model reply: {res.answer}")
-        # logging.debug(f"Model rationale: {res.rationale}")
-        # turbo.inspect_history(n=1)
-
-        score = metric(t, res)
-        logging.debug(f"Score: {score}")
+        score = robbie_style_score(t, res)
+        turbo.inspect_history(n=1)
 
 
     # import dspy.teleprompt
