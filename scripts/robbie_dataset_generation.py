@@ -119,6 +119,9 @@ def filter_conversations_for_robbie(conversations):
 
     return convos
 
+def get_up_to_k_previous_messages(messages, message_idx, k=10):
+    start_idx = max(0, message_idx - k)
+    return messages[start_idx:message_idx]
 
 def generate_training_samples(messages):
     for msg in messages:
@@ -160,7 +163,8 @@ def generate_training_samples(messages):
                 training_samples.append(current_sample) if current_sample['X'] else None
                 # logging.debug(f"Sample finalized with {len(current_sample['X'])} messages and {current_sample['y']['number_of_replies']} replies.")
                 # Reset for a new conversation sample
-                context = [message]  # Start with the current message as context
+                prev_messages = get_up_to_k_previous_messages(messages, message_idx, 10)
+                context = prev_messages + [message]  # Start with the current message as context
                 current_sample = {'X': list(context), 'y': {'number_of_replies': 0, 'replies': []}}
                 robbie_replied = False
                 speakers = {normalized_user}  # Reset speakers for the new sample
@@ -242,7 +246,7 @@ def format_training_samples(training_samples):
         for a in sample['y']['replies']:
             answers.append(f"{a['message']}")
 
-        yield TrainingExample(chats="\n".join(qs), answer="\n".join(answers)).with_inputs("chats")
+        yield TrainingExample(chats="\n".join(qs), answer=". ".join(answers)).with_inputs("chats")
 
 
 class AssessResponse(dspy.Signature):
@@ -306,6 +310,7 @@ def filter_training_samples(samples):
 def main():
     whatsapp_path = sys.argv[1]
     discord_path = sys.argv[2]
+    dataset_path = sys.argv[3]
 
     # Initialize the library with environment variables
     # lib_model.init(os.getenv("SMART_OPENAI_MODEL"), os.getenv("FAST_OPENAI_MODEL"), os.getenv("OPENAI_API_KEY"), os.getenv("PGVECTOR_CONNECTION_STRING"), os.getenv("RECORDMANAGER_CONNECTION_STRING"), temp=os.getenv("OPENAI_TEMPERATURE"))
@@ -321,49 +326,53 @@ def main():
     
     training_samples = filter_training_samples(generate_training_samples(all_messages))
     random.shuffle(training_samples)
-    training_samples = training_samples[:100]
+    training_samples = training_samples
     logging.debug(f"Got {len(training_samples)} training samples.")
 
-    for sample in training_samples:
-        logging.debug("Question:")
-        for q in sample['X']:
-            logging.debug(f"\t{q['timestamp']} {q['user']}: {q['message']}")
+    # for sample in training_samples:
+    #     logging.debug("Question:")
+    #     for q in sample['X']:
+    #         logging.debug(f"\t{q['timestamp']} {q['user']}: {q['message']}")
 
-        logging.debug("Answer:")
-        for a in sample['y']['replies']:
-            logging.debug(f"\t{a['timestamp']} {a['user']}: {a['message']}")
+    #     logging.debug("Answer:")
+    #     for a in sample['y']['replies']:
+    #         logging.debug(f"\t{a['timestamp']} {a['user']}: {a['message']}")
 
-        logging.debug("\n\n")
+    #     logging.debug("\n\n")
 
     dspy_samples = list(format_training_samples(training_samples))
 
     train_set, validate_set, test_set = split_dataset(dspy_samples, 0.6, 0.2, 0.2)
+
+    import pickle
+    with open(dataset_path, 'wb') as f:
+        pickle.dump((train_set, validate_set, test_set), f)
     
-    model = RobbieReply(num_chats=3)
-    model.load("robbie_reply_model.json")
+    # model = RobbieReply(num_chats=3)
+    # model.load("robbie_reply_model.json")
 
-    from dspy.teleprompt import BootstrapFewShotWithRandomSearch, BootstrapFewShot
-    from dspy.evaluate import Evaluate
+    # from dspy.teleprompt import BootstrapFewShotWithRandomSearch, BootstrapFewShot
+    # from dspy.evaluate import Evaluate
 
-    evaluator = Evaluate(devset=test_set, num_threads=4, display_progress=True, display_table=False, metric=robbie_style_score)
+    # evaluator = Evaluate(devset=test_set, num_threads=4, display_progress=True, display_table=False, metric=robbie_style_score)
 
-    # avg_score = evaluator(model)
-    # logging.info(f"BEFORE OPTIMIZATION EVALUATION: {avg_score}")
+    # # avg_score = evaluator(model)
+    # # logging.info(f"BEFORE OPTIMIZATION EVALUATION: {avg_score}")
     
-    compiled_model = model
-    # optimizer = BootstrapFewShotWithRandomSearch(metric=robbie_style_score, num_threads=8, num_candidate_programs=3, max_bootstrapped_demos=3, teacher_settings=dict(lm=gpt4))
-    # compiled_model = optimizer.compile(model, trainset=train_set, valset=validate_set)
-    # compiled_model.save("robbie_reply_model.json")
+    # compiled_model = model
+    # # optimizer = BootstrapFewShotWithRandomSearch(metric=robbie_style_score, num_threads=8, num_candidate_programs=3, max_bootstrapped_demos=3, teacher_settings=dict(lm=gpt4))
+    # # compiled_model = optimizer.compile(model, trainset=train_set, valset=validate_set)
+    # # compiled_model.save("robbie_reply_model.json")
 
-    avg_score = evaluator(compiled_model)
-    logging.info(f"AFTER OPTIMIZATION EVALUATION: {avg_score}")
+    # avg_score = evaluator(compiled_model)
+    # logging.info(f"AFTER OPTIMIZATION EVALUATION: {avg_score}")
 
-    logging.debug("TESTING THE MODEL")
+    # logging.debug("TESTING THE MODEL")
 
-    for t in test_set:
-        res = compiled_model(chats=t.chats)
-        score = robbie_style_score(t, res)
-        turbo.inspect_history(n=1)
+    # for t in test_set:
+    #     res = compiled_model(chats=t.chats)
+    #     score = robbie_style_score(t, res)
+    #     turbo.inspect_history(n=1)
 
 
     # import dspy.teleprompt
