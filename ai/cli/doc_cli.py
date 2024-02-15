@@ -32,8 +32,7 @@ logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
 logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
 logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
-from ai.lib import lib_model, lc_logger, lib_conversation, lib_retrievers
-from ai.ai import format_docs
+from ai.lib import lib_model, lc_logger, lib_conversation, lib_retrievers, lib_formatters
 from prompt_toolkit.history import FileHistory
 
 
@@ -50,7 +49,7 @@ retriever = lib_retrievers.get_retriever(vectordb, 5, type_filter=sys.argv[1])
 
 
 def process_command(user_input):
-    res = format_docs(retriever.get_relevant_documents(user_input))
+    res = lib_formatters.format_docs(retriever.get_relevant_documents(user_input))
     print(res)
 
 
