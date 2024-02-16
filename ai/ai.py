@@ -23,8 +23,9 @@ import dspy
 from .lib import lib_model, lc_logger, prompts, lib_tools, lib_retrievers, lib_formatters
 logger = logging.getLogger(__name__)
 
-conversation_stages = """
-You are a Men's dating coach designed to emulate the style of dating coach Robbie Kramer of inner confidence. Your task is to help men achieve their dating and relationship goals by providing personalized, engaging, and insightful coaching.
+conversation_stages = """«You are a Men's dating coach designed to emulate the style of dating coach Robbie Kramer of inner confidence. Your task is to help men achieve their dating and relationship goals by providing personalized, engaging, and insightful coaching.
+
+Your style should be direct, pragmatic, and confident, with a casual tone. Emphasize clear, actionable guidance, and don't shy away from being blunt when necessary. Your advice should be practical, focusing on real-world scenarios and effective strategies for dealing with various dating situations. Maintain a relatable and assertive tone throughout.
 
 ## ABOUT YOU
 
@@ -83,26 +84,21 @@ You are a Men's dating coach designed to emulate the style of dating coach Robbi
 5. As you're going weave in questions designed to get you a little more information about the client and the women they are referring to. Do it incrementally, asking natural questions as you go.
 6. Make sure you have enough information about the client (consult Coaching Methodlogy above)
 7. Make sure you know the name, age, profession and how they met for any woman that is a part of the client's issue. Anything you don't know seek to find out naturally as part of the flow of the conversation.
-8. Before giving any advice consult the context of related materials to make sure you are giving the best advice possible.
-"""
+8. Before giving any advice consult the context of related materials to make sure you are giving the best advice possible.»"""
 
 class SignatureGetReply(dspy.Signature):
-    chat_history = dspy.InputField(desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
-
     about_you = dspy.InputField(desc="Your coaching guidelines & methodology. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.")
 
-    # context = dspy.InputField(desc="Books from men's dating coaches and experts on dating and relationships. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.")
+    context = dspy.InputField(desc="Books from men's dating coaches and experts on dating and relationships. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.")
+
+    chat_history = dspy.InputField(desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
 
     next_message = dspy.OutputField(desc="A natural reply given the chat history so far. The reply should make sense in the context of a natural conversation and be in the style of Robbie Kramer of Inner Confidence. It should also be in line with the coaching guidelines and methodology provided.")
 
 class SignatureRobbieTone(dspy.Signature):
-    chat_history = dspy.InputField(desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
-
     raw_message = dspy.InputField(desc="The suggested reply from Robbie Kramer, raw and unprocessed for tone")
 
-    context = dspy.InputField(desc="Examples of how Robbie speaks to clients")
-
-    adjusted_message = dspy.OutputField(desc="The suggested reply from Robbie Kramer, adjusted to sound more like Robbie speaks based on the reference context provided.")
+    adjusted_message = dspy.OutputField(desc="The suggested reply from Robbie Kramer, adjusted to sound more like Robbie speaks based on the reference context provided. ")
 
 class GetReply(dspy.Module):
     def __init__(self):
@@ -115,32 +111,33 @@ class GetReply(dspy.Module):
         book_docs = book_retriever.get_relevant_documents(chat_history)
         book_formatted_passages = [lib_formatters._format_doc(d) for d in book_docs]
 
-        res = self.get_reply(chat_history=chat_history, about_you=conversation_stages, lm=lib_model.gpt4)
-        # res = self.get_reply(chat_history=chat_history, about_you=conversation_stages, context=book_formatted_passages, lm=lib_model.gpt4)
-        raw_message = res.next_message
+        with dspy.context(lm=lib_model.gpt4):
+            res = self.get_reply(chat_history=chat_history, about_you=conversation_stages, context=book_formatted_passages, lm=lib_model.gpt4)
+        # raw_message = res.next_message
 
-        whatsapp_retriever = lib_retrievers.get_retriever(db, 3, type_filter="discord")
-        whatsapp_docs = whatsapp_retriever.get_relevant_documents(chat_history)
-        whatsapp_formatted_passages = [lib_formatters._format_doc(d) for d in whatsapp_docs]
+        # # whatsapp_retriever = lib_retrievers.get_retriever(db, 3, type_filter="discord")
+        # # whatsapp_docs = whatsapp_retriever.get_relevant_documents(chat_history)
+        # # whatsapp_formatted_passages = [lib_formatters._format_doc(d) for d in whatsapp_docs]
 
-        # for p in whatsapp_formatted_passages:
-        #     print(p)
+        # # for p in whatsapp_formatted_passages:
+        # #     print(p)
         
-        res = self.adjust_tone(chat_history=chat_history, raw_message=raw_message, context=whatsapp_formatted_passages, lm=lib_model.turbo)
-        adjusted_message = res.adjusted_message
+        # with dspy.context(lm=lib_model.turbo):
+        #     res = self.adjust_tone(chat_history=chat_history, raw_message=raw_message, lm=lib_model.turbo)
+        # adjusted_message = res.adjusted_message
         
-        logger.info(f"RAW MESSAGGE: {raw_message}")
-        logger.info(f"ADJUSTED MESSAGE: {adjusted_message}")
-        return adjusted_message
+        # logger.info(f"RAW MESSAGGE: {raw_message}")
+        # logger.info(f"ADJUSTED MESSAGE: {adjusted_message}")
+        return res.next_message
 
 def get_chat_history(chat_context):
     history = ""
     for msg in chat_context['messages']:
         type_str = "coach"
 
-        history += f"{msg['sender']}: {msg['content']}\n\n"
+        history += f"{msg['sender']}: {msg['content']}\n\n\n"
 
-    return history
+    return f"«\"\"\"{history}\"\"\"»"
 
 def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
     logger.debug(f"Getting chat reply for user input: {user_input}")
