@@ -93,7 +93,7 @@ class SignatureGetReply(dspy.Signature):
 
     chat_history = dspy.InputField(desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
 
-    next_message = dspy.OutputField(desc="A natural reply given the chat history so far. The reply should make sense in the context of a natural conversation and be in the style of Robbie Kramer of Inner Confidence. It should also be in line with the coaching guidelines and methodology provided.")
+    coach_reply = dspy.OutputField(desc="Coach: ")
 
 class SignatureRobbieTone(dspy.Signature):
     raw_message = dspy.InputField(desc="The suggested reply from Robbie Kramer, raw and unprocessed for tone")
@@ -128,7 +128,7 @@ class GetReply(dspy.Module):
         
         # logger.info(f"RAW MESSAGGE: {raw_message}")
         # logger.info(f"ADJUSTED MESSAGE: {adjusted_message}")
-        return res.next_message
+        return res.coach_reply
 
 def get_chat_history(chat_context):
     history = ""
