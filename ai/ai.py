@@ -93,10 +93,11 @@ class SignatureGetReply(dspy.Signature):
 
     # context = dspy.InputField(desc="Books from men's dating coaches and experts on dating and relationships. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.")
 
-    next_message = dspy.OutputField(desc="Based on your coaching guidelines & methodology what you, Robbie Kramer men's dating coach would say next. Should be based exclusively on the context provided and the chat history with the client.")
+    next_message = dspy.OutputField(desc="A natural reply given the chat history so far. The reply should make sense in the context of a natural conversation and be in the style of Robbie Kramer of Inner Confidence. It should also be in line with the coaching guidelines and methodology provided.")
 
 class SignatureRobbieTone(dspy.Signature):
     chat_history = dspy.InputField(desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
+
     raw_message = dspy.InputField(desc="The suggested reply from Robbie Kramer, raw and unprocessed for tone")
 
     context = dspy.InputField(desc="Examples of how Robbie speaks to clients")
@@ -105,8 +106,8 @@ class SignatureRobbieTone(dspy.Signature):
 
 class GetReply(dspy.Module):
     def __init__(self):
-        self.get_reply = dspy.ChainOfThoughtWithHint(SignatureGetReply)
-        self.adjust_tone = dspy.ChainOfThoughtWithHint(SignatureRobbieTone)
+        self.get_reply = dspy.Predict(SignatureGetReply)
+        self.adjust_tone = dspy.Predict(SignatureRobbieTone)
 
     def forward(self, chat_history):
         db = lib_model.get_vectordb()
@@ -118,7 +119,7 @@ class GetReply(dspy.Module):
         # res = self.get_reply(chat_history=chat_history, about_you=conversation_stages, context=book_formatted_passages, lm=lib_model.gpt4)
         raw_message = res.next_message
 
-        whatsapp_retriever = lib_retrievers.get_retriever(db, 3, type_filter="whatsapp_chat")
+        whatsapp_retriever = lib_retrievers.get_retriever(db, 3, type_filter="discord")
         whatsapp_docs = whatsapp_retriever.get_relevant_documents(chat_history)
         whatsapp_formatted_passages = [lib_formatters._format_doc(d) for d in whatsapp_docs]
 
@@ -137,7 +138,7 @@ def get_chat_history(chat_context):
     for msg in chat_context['messages']:
         type_str = "coach"
 
-        history += f"{msg['sender']}: {msg['content']}\n"
+        history += f"{msg['sender']}: {msg['content']}\n\n"
 
     return history
 
@@ -163,7 +164,10 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     logger.debug(f"Chat history: {chat_history}")
     logger.debug(f"Got reply: {res}")
 
-    chat_context['messages'].append({'sender': 'coach', 'content': user_input, 'type': 'text'})
+    chat_context['messages'].append({'sender': 'coach', 'content': res, 'type': 'text'})
+
+    logger.info(lib_model.turbo)
+    logger.info(lib_model.gpt4)
 
     return res, chat_context
 

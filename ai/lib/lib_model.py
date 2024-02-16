@@ -41,6 +41,8 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
     gpt4 = dspy.OpenAI(smart_model_name, api_key=api_key, temperature=0.7, max_tokens=1000)
 
     dspy.settings.configure(lm=turbo, trace=[])
+    import dsp
+    dsp.settings.log_openai_usage = True
 
 
     logger = logging.getLogger(__name__)

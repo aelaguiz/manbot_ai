@@ -2,7 +2,7 @@ import sys
 import os
 
 # Append the directory above 'scripts' to sys.path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 import os
 import sys
