@@ -1,9 +1,10 @@
 import dspy
 
-from .lib_docdb import get_docdb
 import logging
 from typing import Optional, List, Union
 from dsp.utils import dotdict
+
+from ai.lib.lib_model import get_vectordb
 
 class PGVectorRM(dspy.Retrieve):
     def __init__(
@@ -11,7 +12,7 @@ class PGVectorRM(dspy.Retrieve):
         k: int = 3,
     ):
 
-        self.docdb = get_docdb()
+        self.docdb = get_vectordb()
         self.retriever = self.docdb.as_retriever(search_kwargs={'k': k})
         super().__init__(k=k)
 

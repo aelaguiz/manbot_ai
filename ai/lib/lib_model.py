@@ -9,6 +9,7 @@ from langchain.cache import SQLiteCache
 from langchain.globals import set_llm_cache
 from langchain.callbacks import OpenAICallbackHandler
 import httpx
+import dspy
 
 _vectordb = None
 _embedding = None
@@ -22,6 +23,8 @@ _db = None
 _record_manager = None
 _oai = OpenAICallbackHandler()
 
+turbo = gpt4 = None
+
 def init(smart_model_name, fast_model_name, api_key, db_connection_string, record_manager_connection_string, temp=0.5):
     global _fast_llm
     global _json_fast_llm
@@ -30,6 +33,15 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
     global _record_manager
     global _smart_llm
     global _json_smart_llm
+
+    global turbo
+    global gpt4
+
+    turbo = dspy.OpenAI(fast_model_name, api_key=api_key, temperature=0.7, max_tokens=1000)
+    gpt4 = dspy.OpenAI(smart_model_name, api_key=api_key, temperature=0.7, max_tokens=1000)
+
+    dspy.settings.configure(lm=turbo, trace=[])
+
 
     logger = logging.getLogger(__name__)
     logger.debug(f"Initializing model")

@@ -2,7 +2,7 @@ import sys
 import os
 
 # Append the directory above 'scripts' to sys.path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 import os
 import sys
@@ -11,7 +11,6 @@ import json
 import random
 import logging
 import dotenv
-from ai import ai, init
 from prompt_toolkit import prompt
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
@@ -27,11 +26,17 @@ config_path = os.getenv('LOGGING_CONF_PATH')
 
 # Use the configuration file appropriate to the environment
 logging.config.fileConfig(config_path)
-logging.getLogger("httpx").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
-logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
+# logging.getLogger("httpx").setLevel(logging.CRITICAL)
+# logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
+# logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
+# logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
+logging.getLogger("httpx").setLevel(logging.DEBUG)
+logging.getLogger("openai").setLevel(logging.DEBUG)
+logging.getLogger("httpcore.connection").setLevel(logging.DEBUG)
+logging.getLogger("httpcore.http11").setLevel(logging.DEBUG)
+logging.getLogger("openai._base_client").setLevel(logging.DEBUG)
 
+from ai import ai, init
 from ai.lib import lib_model, lc_logger, lib_conversation
 from prompt_toolkit.history import FileHistory
 
@@ -64,13 +69,17 @@ def main():
     bindings = KeyBindings()
     history = FileHistory('./gpt_prompt_history.txt')  # specify the path to your history file
 
-    initial_messages = []
+    initial_messages = [{
+        'sender': 'coach',
+        'type': 'text',
+        'content': "Hey! Let's start with the basics. Are you looking for help with a specific girl or are you looking for more general advice?"
+    }]
 
     chat_context = None
 
     for msg in initial_messages:
-        print(f"{msg['type']}: {msg['text']}\n")
-        lib_conversation.save_message(msg['text'], msg['type'])
+        print(f"{msg['sender']}: {msg['content']}\n")
+        lib_conversation.save_message(msg['content'], msg['type'])
 
     while True:
         multiline = False
