@@ -24,10 +24,10 @@ from tenacity import (
 
 import logging
 import logging.config
-logging.getLogger("httpx").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
-logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
-logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
+# logging.getLogger("httpx").setLevel(logging.CRITICAL)
+# logging.getLogger("httpcore.connection").setLevel(logging.CRITICAL)
+# logging.getLogger("httpcore.http11").setLevel(logging.CRITICAL)
+# logging.getLogger("openai._base_client").setLevel(logging.CRITICAL)
 
 
 """
@@ -324,7 +324,7 @@ def split_conversations(messages: List[str]) -> List[str]:
 
     total_msgs = 0
     for idx, chunk in enumerate(time_chunks):
-        logger.debug(f"Chunk {idx+1}: {len(chunk)} messages")
+        # logger.debug(f"Chunk {idx+1}: {len(chunk)} messages")
         # for msg in chunk:
         #     logger.debug(f"\t\t{msg['timestamp']} {msg['user']}: {msg['message']}")
         #     logger.debug(json.dumps(format_message_for_json(msg)))
@@ -334,7 +334,7 @@ def split_conversations(messages: List[str]) -> List[str]:
 
     logger.debug(f"Counted {total_msgs} messages in {len(time_chunks)} chunks")
 
-    llm = lib_model.get_json_llm()
+    llm = lib_model.get_json_fast_llm()
     lmd = lc_logger.LlmDebugHandler()
     oaic = OpenAICallbackHandler()
 
@@ -385,7 +385,7 @@ def split_conversations(messages: List[str]) -> List[str]:
     for idx, batch_of_batches in enumerate(batches_of_batches):
         try:
             logger.debug(f"Processing batch {idx+1}/{len(batches_of_batches)} containing {len(batch_of_batches)} batches")
-            res = batch_classify_with_backoff(message_classify_chain, batch_of_batches, config={'callbacks': [oaic, lmd]})
+            res = batch_classify_with_backoff(message_classify_chain, batch_of_batches, config={'callbacks': [oaic]})
             logger.debug(oaic)
             for batch in res:
                 logger.debug(f"Result: ")

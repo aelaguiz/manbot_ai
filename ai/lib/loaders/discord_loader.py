@@ -42,6 +42,7 @@ class DiscordChatLoader(UnstructuredFileLoader):
                 parsed_timestamp = datetime.fromisoformat(timestamp_str)
                 current_msg = {
                     "number": message_number,
+                    'message_type': 'discord',
                     "timestamp": parsed_timestamp,
                     "user": user,
                     "message": message
@@ -61,6 +62,21 @@ class DiscordChatLoader(UnstructuredFileLoader):
         return messages
 
 
+    def load_messages_as_docs(self) -> List[Document]:
+        messages = self.load_messages()
+        doc = Document(page_content="\n".join(ai.lib.conversation_splitter.format_message_for_prompt(c) for c in messages), metadata={
+            "type": "discord_dump",
+            "title": f"Discord Dump {self.file_path}",
+            "source": f"Discord Chat Export {self.file_path}",
+            "filename": self.file_path
+        })
+
+        content_hash = hashlib.sha256(doc.page_content.encode()).hexdigest()
+        metadata_hash = hashlib.sha256(json.dumps(doc.metadata).encode()).hexdigest()
+        guid = f"{content_hash}-{metadata_hash}"
+        doc.metadata['guid'] = guid
+        # docs.append(doc)
+        return [doc]
 
     def load(self) -> List[Document]:
 

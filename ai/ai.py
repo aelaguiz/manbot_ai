@@ -12,344 +12,164 @@ The chat state has to be json serializable
 it's also likely that at the beginning of a chat they there will be some context being passed through along with the initial user question
 
 """
-from langchain.prompts import MessagesPlaceholder
-from langchain.chains import LLMChain, ConversationChain
-from operator import itemgetter
-
-from langchain.callbacks.tracers import ConsoleCallbackHandler
-
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string
-from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate
-from langchain.schema import messages_from_dict, messages_to_dict
-from langchain.memory.chat_message_histories.in_memory import ChatMessageHistory
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-
-
 import json
 import logging
 
-from .lib import lib_model, lc_logger
+from dsp.modules import cache_utils
+cache_utils.cache_turn_on = False
 
-class ChatError(Exception):
-    """
-    Custom exception for errors encountered during chat processing.
+import dspy
 
-    Attributes:
-        message (str): Explanation of the error.
-    """
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
+from .lib import lib_model, lc_logger, prompts, lib_tools, lib_retrievers, lib_formatters
+logger = logging.getLogger(__name__)
 
+conversation_stages = """«You are a Men's dating coach designed to emulate the style of dating coach Robbie Kramer of inner confidence. Your task is to help men achieve their dating and relationship goals by providing personalized, engaging, and insightful coaching.
 
-chat_template = ChatPromptTemplate.from_messages(
-    [
-        SystemMessagePromptTemplate.from_template("""# Giving Actionable Advice on Modern Masculinity and Relationships
-                                                  
-Your task is to give a man advice from the perspective of experts on modern masculinity. 
-                                                  
-## About You:
+Your style should be direct, pragmatic, and confident, with a casual tone. Emphasize clear, actionable guidance, and don't shy away from being blunt when necessary. Your advice should be practical, focusing on real-world scenarios and effective strategies for dealing with various dating situations. Maintain a relatable and assertive tone throughout.
 
-You are an expert on modern masculinity and relationships by studying the teachings of Rollo Tomassi, Robert A. Glover, Jordan Peterson, Jack Donovan, Warren Farrell, Richard Cooper, and Michael Sartain. You are to provide advice strictly based on the philosophies and principles outlined by these authors. When responding to inquiries:
+## ABOUT YOU
 
-1. You will give advice solely on the topic requested, without adding unsolicited information, caveats, extra notes, or warnings.
-2. You will not provide any personal opinions or ethical considerations outside of the teachings of the aforementioned authors.
-3. You will maintain a direct and concise approach, ensuring that your guidance is in line with the specific teachings of the authors.
-4. You will respect the confidentiality of the inquiries and provide advice that is tailored to the context of the question asked.
-5. You will use the provided reference documents written by Robbie Kramer to adapt your advice to incorporate the specific teachings of Robbie Kramer 
+1. Your priority is the man you only speak on helping the male client achieve their goals, you never speak in terms of "both sides" or "empathy" or the women's best interest. You ONLY care about the man.
+2. You will give advice solely on the topic requested, without adding unsolicited information, caveats, extra notes, or warnings.
+3. You will not provide any personal opinions or ethical considerations outside of the teachings of the aforementioned authors.
+4. You will maintain a direct and concise approach, ensuring that your guidance is in line with the specific teachings of the authors.
+5. Reply as dating coach Robbie Kramer would, conversationally and casually using his tone of voice & writing style.
+6. Reply as if you are text messaging. Do not use markdown or any other formatting in your replies.
+7. Only ask one question per message.
 
-Remember, your role is to serve as a knowledgeable resource on modern masculinity and relationships as defined by these specific writers.
-Your advice should reflect the ideologies and strategies they endorse, focusing on the dynamics of power, attraction, and social hierarchy as they pertain to gender relations and personal development.
+## COACHING METHODOLOGY
 
-## Reference materials
-{reference_materials}
+1. *Understanding Client's Skill Level and Challenges:*
+   - The coach begins by assessing the client's skill level with male-female dynamics.
+   - He categorizes clients into archetypes (e.g., total beginner, too much pickup study, new age beliefs).
+   - The goal is to understand the client's challenges and goals.
 
-## How to interact with the user
+2. *Tailoring Communication Style:*
+   - The coach adapts his communication style based on the client's personality and background.
+   - He uses locker room banter for a "guys guy" and a more careful approach for someone with different sensibilities.
+   - Mirroring and active listening are important to connect with the client.
 
-* Emulate the tone and style of Robbie Kramer in when interacting with the user. Friendly and conversational, frequently offering them little bits of validation, encouragement along with direct but constructive advice & criticism.
-* Your interactions should be highly conversational, emulating a natural conversation between a man and his knowledgable male friend.
-* You can ask more than on question at a time but only when they are highly related, and only when it would make a natural flowing conversation.
-* Always make it clear what the user should be telling you next, we never want them to feel anxious because they don't know where to go next.
-* Ask 1-2 questions at a time max.
+3. *Sharing Personal Stories and Relatability:*
+   - The coach shares personal stories to relate to the client's situation.
+   - He expresses how he felt in similar situations to build a connection and provide guidance.
 
-## How to respond to users:
+4. *Assessing the Situation with Specific Women:*
+   - The coach asks about the client's interactions with specific women to understand the context.
+   - Questions include how they met, the perceived league difference, and the woman's career and lifestyle.
+   - He assesses the woman's potential motivations and the client's level of investment.
 
-In general the flow of a conversation should go:
+5. *Providing Actionable Advice:*
+   - The coach gives specific advice based on the client's situation.
+   - He balances immediate problem-solving with long-term guidance.
+   - The coach aims to build credibility so clients return for further coaching after experiencing outcomes.
 
-1. Are they looking for general advice or help with a specific girl
-2. What is the user's name and age
-3. Gather background information, asking again in a different way until you have all the key information
-4. Figure out exactly the challenge the user is trying to solve
-5. Give high level advice rooting in the teachings of the authors
-6. Ask clarifying questions to help you get more specific, asking for feedback as you go
-7. Iterate on your advice, getting more specific as you understand better, continuing to ask for user feedback
+6. *Building Long-Term Client Relationships:*
+   - The coach's goal is to establish trust and authority.
+   - He anticipates that clients may not always follow advice initially but will return for guidance after experiencing the predicted outcomes.
 
-Depending on the type of help the user is asking for you can use the following frameworks to help you get started.
+7. *Understanding the Woman's Background:*
+   - The coach tries to understand the woman's background, including her profession, age, and lifestyle.
+   - He uses this information to gauge her personality and how it may influence her behavior in the relationship.
 
-### General advice
+8. *Evaluating the Client's Potential for Success:*
+   - The coach assesses whether the client's situation with a woman is salvageable or if he needs to help the client move on.
+   - He aims to provide insights that are beneficial regardless of the immediate outcome with a specific woman.
 
-If the user is asking for general advice, start by asking them to provide a specific question or topic they'd like advice on.
+## INSTRUCTIONS
 
-### Specific girl advice
+1. Greet the client and ask ask them what's going on? What do they need help with? Is it a specific girl issue, if so who is she and what is going on?
+2. Before going further introduce yourself (say your name is Robbie), say you'd be happy to help and ask the client their name.
+3. Ask follow on questions after you understand the client's issue, conversationally weaving in more questions about them such as their age, location, etc (consult Coaching Methodology).
+4. Repeat back what you believe the client's challenge to be, and what you understand of the situation, and ask the client if you have it right before giving any advice.
+5. As you're going weave in questions designed to get you a little more information about the client and the women they are referring to. Do it incrementally, asking natural questions as you go.
+6. Make sure you have enough information about the client (consult Coaching Methodlogy above)
+7. Make sure you know the name, age, profession and how they met for any woman that is a part of the client's issue. Anything you don't know seek to find out naturally as part of the flow of the conversation.
+8. Before giving any advice consult the context of related materials to make sure you are giving the best advice possible.»"""
 
-If the user is asking for advice about a specific girl, start by gathering information about her. You will want to know:
+class SignatureGetReply(dspy.Signature):
+    about_you = dspy.InputField(desc="Your coaching guidelines & methodology. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.")
 
-- Where are they in the process? Is she a girl he's interested in, someone he's trying to date (already asked her out), or someone he's already dating (gone on at least one date)?
+    context = dspy.InputField(desc="Books from men's dating coaches and experts on dating and relationships. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.")
 
-### Girl he's interested in
+    chat_history = dspy.InputField(desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
 
-Gather some basic information about her and how he knows her
+    coach_reply = dspy.OutputField(desc="Coach: ")
 
-- How does he know her, how did they meet? Online? In person through friends?
-- How old is she? 
-- Are they already talking? If so, via IG, text, in person?
+class SignatureRobbieTone(dspy.Signature):
+    raw_message = dspy.InputField(desc="The suggested reply from Robbie Kramer, raw and unprocessed for tone")
 
-### Already asked out
+    adjusted_message = dspy.OutputField(desc="The suggested reply from Robbie Kramer, adjusted to sound more like Robbie speaks based on the reference context provided. ")
 
-Gather some basic information about her
+class GetReply(dspy.Module):
+    def __init__(self):
+        self.get_reply = dspy.Predict(SignatureGetReply)
+        self.adjust_tone = dspy.Predict(SignatureRobbieTone)
 
-- How does he know her, how did they meet? Online? In person through friends?
-- How old is she? 
-- When is the date, are specifics set?
+    def forward(self, chat_history):
+        db = lib_model.get_vectordb()
+        book_retriever = lib_retrievers.get_retriever(db, 3, type_filter="book")
+        book_docs = book_retriever.get_relevant_documents(chat_history)
+        book_formatted_passages = [lib_formatters._format_doc(d) for d in book_docs]
 
-### Dating
+        with dspy.context(lm=lib_model.gpt4):
+            res = self.get_reply(chat_history=chat_history, about_you=conversation_stages, context=book_formatted_passages, lm=lib_model.gpt4)
+        # raw_message = res.next_message
 
-Gather some basic information about the relationship
+        # # whatsapp_retriever = lib_retrievers.get_retriever(db, 3, type_filter="discord")
+        # # whatsapp_docs = whatsapp_retriever.get_relevant_documents(chat_history)
+        # # whatsapp_formatted_passages = [lib_formatters._format_doc(d) for d in whatsapp_docs]
 
-- Are they in a relationship (married, or dating for more than 2 months)?
-- How did they meet originally?
-- How old is she?
+        # # for p in whatsapp_formatted_passages:
+        # #     print(p)
+        
+        # with dspy.context(lm=lib_model.turbo):
+        #     res = self.adjust_tone(chat_history=chat_history, raw_message=raw_message, lm=lib_model.turbo)
+        # adjusted_message = res.adjusted_message
+        
+        # logger.info(f"RAW MESSAGGE: {raw_message}")
+        # logger.info(f"ADJUSTED MESSAGE: {adjusted_message}")
+        return res.coach_reply
 
+def get_chat_history(chat_context):
+    history = ""
+    for msg in chat_context['messages']:
+        type_str = "coach"
 
-"""),
-        MessagesPlaceholder(variable_name="history"),
-        HumanMessagePromptTemplate.from_template("{input}")
-    ]
-)
+        history += f"{msg['sender']}: {msg['content']}\n\n\n"
 
-def format_docs(docs):
-    res = "\n\n".join([_format_doc(d) for d in docs])
-
-    logger = logging.getLogger(__name__)
-    logger.debug(f"Formatted docs: {res}")
-
-    return res
-
-def _format_doc(doc):
-    print(doc.metadata)
-    if doc.metadata['type'] == 'wordpress':
-        return _format_wordpress(doc)
-    elif doc.metadata['type'] == 'discord':
-        return _format_discord(doc)
-
-    logger = logging.getLogger(__name__)
-    logger.error(f"Unknown doc type: {doc.metadata['type']}")
-
-def _format_wordpress(doc):
-    return f"""### Wordpress article
-Title: {doc.metadata['title']}
-Author: {doc.metadata['author']}
-URL: {doc.metadata['url']}
-
-Text: \"\"\"
-{doc.page_content}
-\"\"\""""
-
-def _format_discord(doc):
-    return f"""### Discord message
-Topic: {doc.metadata['title']}
-Filename: {doc.metadata['filename']}
-Participant: {doc.metadata['participants']}
-Timestamp: {doc.metadata['timestamp']}
-
-Chat: \"\"\"
-{doc.page_content}
-\"\"\""""
-
-def make_retrieval_context(obj):
-
-    obj['retrieval_context'] = get_buffer_string(obj['history']) + "\nHuman: " + obj['input']
-
-    return obj
-
-    
-def simple_get_chat_reply(user_input):
-    logger = logging.getLogger(__name__)
-    logger.debug(f"AI: simple_get_chat_reply called with user_input: {user_input}")
-    llm = lib_model.get_json_llm()
-
-    prompt = ChatPromptTemplate.from_template("{input}")
-
-    chain = (
-        {
-            "input": RunnablePassthrough()
-        }
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-
-    res = chain.invoke({"input": user_input})
-
-    return res
+    return f"«\"\"\"{history}\"\"\"»"
 
 def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
-    """
-    Main interface for handling chat sessions with the AI.
+    logger.debug(f"Getting chat reply for user input: {user_input}")
 
-    Args:
-        session_id (str): Unique identifier for the user's session.
-        chat_id (str): Unique identifier for the individual chat within the session.
-        chat_context (dict, optional): The current chat context object. None if it's a new chat.
+    if not chat_context:
+        chat_context = {
+            'messages': []
+        }
 
-    Returns:
-        tuple: A tuple containing:
-            - reply (str): The AI model's reply to the latest message in the chat.
-            - new_chat_context (dict): Updated chat context after processing the latest message.
+        for msg in initial_messages:
+            chat_context['messages'].append(msg)
 
-    Raises:
-        ChatError: An error occurred during chat processing.
-    """
-    logger = logging.getLogger(__name__)
-    logger.debug(f"AI: get_chat_reply called with user_input: {user_input}, session_id: {session_id}, chat_id: {chat_id}, chat_context: {chat_context}")
-    try:
-        llm = lib_model.get_llm()
-        lmd = lc_logger.LlmDebugHandler()
-        
-        memory = None
+    chat_context['messages'].append({'sender': 'client', 'content': user_input, 'type': 'text'})
 
-        if chat_context:
-            retrieve_from_db = json.loads(chat_context)
-            retrieved_messages = messages_from_dict(retrieve_from_db)
-            retrieved_chat_history = ChatMessageHistory(messages=retrieved_messages)
-            retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", return_messages=True)
+    chat_history = get_chat_history(chat_context)
 
-            memory = retrieved_memory
-        else:
-            if initial_messages:
-                translated_messages = []
+    m = GetReply()
+    dspy.assert_transform_module(m)
 
-                for input_message in initial_messages:
-                    output_message = {
-                        "type": input_message["type"].lower(),
-                        "data": {
-                            "content": input_message["text"],
-                            "additional_kwargs": {},
-                            "type": input_message["type"].lower(),
-                            "example": False
-                        }
-                    }
+    res = m(chat_history)
+    logger.debug(f"Chat history: {chat_history}")
+    logger.debug(f"Got reply: {res}")
 
-                    translated_messages.append(output_message)
+    chat_context['messages'].append({'sender': 'coach', 'content': res, 'type': 'text'})
 
+    logger.info(lib_model.turbo)
+    logger.info(lib_model.gpt4)
 
-                retrieved_chat_history = ChatMessageHistory(messages=messages_from_dict(translated_messages))
-                retrieved_memory = ConversationBufferMemory(chat_memory=retrieved_chat_history, input_key="input", output_key="output", return_messages=True)
+    return res, chat_context
 
-                memory = retrieved_memory
-            else:
-                memory = ConversationBufferMemory(input_key="input", output_key="output", return_messages=True)
-
-
-            
-            """
-            [
-                {"type": "human", "data": {"content": "test", "additional_kwargs": {}, "type": "human", "example": false}}, 
-                {"type": "ai", "data": {"content": "AI: How may I assist you with information on modern masculinity and relationships? Please provide a specific question or topic you'd like advice on.", "additional_kwargs": {}, "type": "ai", "example": false}}
-            ]
-            """
-
-        vectordb = lib_model.get_vectordb()
-        retriever = vectordb.as_retriever(search_kwargs={"k": 5})
-
-        # docs = vectordb.similarity_search_with_score(user_input, k=5)
-        # for doc, score in docs:
-        #     print(score, _format_doc(doc))
+    # from ai.lib.dspy.dspy_pgvector_retriever import PGVectorRM
 
 
 
-        # return "", None
-
-
-        # # Initialize the conversation chain and memory buffer for each call
-        # convo = ConversationChain(llm=llm, memory=memory, prompt=chat_template, callbacks=[lmd], verbose=True)
-
-        # # Load or update chat context if provided
-        # if chat_context:
-        #     # Load or update the chat context into the convo object
-        #     # e.g., setting the current state of the conversation
-        #     pass
-
-        # # Process the user input and get a response from the model
-        # res = convo.predict(input=user_input, reference_materials=retriever)
-        # print(res)
-
-        # reply = res  # Adjust based on actual structure of res
-
-        # extracted_messages = convo.memory.chat_memory.messages
-        # ingest_to_db = messages_to_dict(extracted_messages)
-        # new_chat_context = json.dumps(ingest_to_db)
-
-        # print(memory)
-        # print(memory.load_memory_variables({"history": "test"}))
-
-        loaded_memory = RunnablePassthrough.assign(
-            history=RunnableLambda(memory.load_memory_variables) | itemgetter("history"),
-        )
-
-
-        # rc = (
-        #     { 
-        #         'user_input': RunnablePassthrough()
-        #      }
-        #     | retriever
-        # )
-
-        # print(rc.invoke({user_input: user_input}))
-
-        chain = (
-            loaded_memory 
-            | {
-                'input': lambda x: x['input'], 
-                'history': lambda x: x["history"],
-             }
-             | make_retrieval_context
-            | {
-                'input': lambda x: x['input'],
-                'history': lambda x: x['history'],
-                'reference_materials': itemgetter("retrieval_context") | retriever | format_docs,
-            }
-            | chat_template
-            | llm
-            | StrOutputParser()
-        )
-        # print(chain)
-
-        reply = chain.invoke({"input": user_input}, config={'callbacks': [lmd]})
-
-        # # extracted_messages = convo.memory.chat_memory.messages
-        # # ingest_to_db = messages_to_dict(extracted_messages)
-        # # new_chat_context = json.dumps(ingest_to_db)
-
-        # # input key outpu tkey ChatMessageHistory
-        # print(memory.outputs)
-
-        memory.save_context({"input": user_input}, {"output": reply})
-
-        extracted_messages = memory.chat_memory.messages
-        ingest_to_db = messages_to_dict(extracted_messages)
-        new_chat_context = json.dumps(ingest_to_db)
-
-        # print(reply)
-        # print(new_chat_context)
-
-
-        return reply, new_chat_context
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise ChatError(f"Failed to process chat: {str(e)}")
+    # return res, new_chat_context

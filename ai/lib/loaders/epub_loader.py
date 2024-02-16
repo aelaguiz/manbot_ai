@@ -35,7 +35,8 @@ class EPubLoader(UnstructuredFileLoader):
             "title": book.get_metadata('DC', 'title')[0][0] if book.get_metadata('DC', 'title') else 'Unknown Title',
             "author": book.get_metadata('DC', 'creator')[0][0] if book.get_metadata('DC', 'creator') else 'Unknown Author',
             'type': 'book',
-            "filename": filename
+            "filename": filename,
+            "source": f"EPub {self.file_path}"
         })
 
         docs.append(doc)

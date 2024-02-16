@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-from ai import __version__
+from ai.version import __version__
 
 setup(
     name='ai',  # Change to your library's name
@@ -61,11 +61,12 @@ setup(
         'jsonpatch==1.33',
         'jsonpath-python==1.0.6',
         'jsonpointer==2.4',
-        'langchain==0.0.352',
-        'langchain-community==0.0.6',
-        'langchain-core==0.1.3',
+        'langchain==0.1.5',
+        'langchain-community==0.0.17',
+        'langchain-core==0.1.18',
+        'langchain-openai==0.0.5',
         'langdetect==1.0.9',
-        'langsmith==0.0.75',
+        'langsmith==0.0.86',
         'loguru==0.7.2',
         'lxml==4.9.4',
         'markdown-it-py==3.0.0',
@@ -76,7 +77,7 @@ setup(
         'mypy-extensions==1.0.0',
         'nltk==3.8.1',
         'numpy==1.26.2',
-        'openai==1.6.1',
+        'openai==1.11.0',
         'packaging==23.2',
         'pgvector==0.2.4',
         'pinecone-client==2.2.4',
