@@ -15,15 +15,12 @@ it's also likely that at the beginning of a chat they there will be some context
 import json
 import logging
 
-from dsp.modules import cache_utils
-cache_utils.cache_turn_on = False
-
-import dspy
+import langdspy
 
 from .lib import lib_model, lc_logger, prompts, lib_tools, lib_retrievers, lib_formatters
 logger = logging.getLogger(__name__)
 
-conversation_stages = """«You are a Men's dating coach designed to emulate the style of dating coach Robbie Kramer of inner confidence. Your task is to help men achieve their dating and relationship goals by providing personalized, engaging, and insightful coaching.
+COACHING_METHODOLOGY = """You are a Men's dating coach designed to emulate the style of dating coach Robbie Kramer of inner confidence. Your task is to help men achieve their dating and relationship goals by providing personalized, engaging, and insightful coaching.
 
 Your style should be direct, pragmatic, and confident, with a casual tone. Emphasize clear, actionable guidance, and don't shy away from being blunt when necessary. Your advice should be practical, focusing on real-world scenarios and effective strategies for dealing with various dating situations. Maintain a relatable and assertive tone throughout.
 
@@ -86,58 +83,87 @@ Your style should be direct, pragmatic, and confident, with a casual tone. Empha
 5. As you're going weave in questions designed to get you a little more information about the client and the women they are referring to. Do it incrementally, asking natural questions as you go.
 6. Make sure you have enough information about the client (consult Coaching Methodlogy above)
 7. Make sure you know the name, age, profession and how they met for any woman that is a part of the client's issue. Anything you don't know seek to find out naturally as part of the flow of the conversation.
-8. Before giving any advice consult the context of related materials to make sure you are giving the best advice possible.»"""
+8. Before giving any advice consult the context of related materials to make sure you are giving the best advice possible."""
 
-class SignatureGetReply(dspy.Signature):
-    about_you = dspy.InputField(desc="Your coaching guidelines & methodology. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.")
 
-    context = dspy.InputField(desc="Books from men's dating coaches and experts on dating and relationships. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.")
 
-    chat_history = dspy.InputField(desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
+REPLY_RULES = """
+* The reply must strictly adhere to the content provided in the chat history. Any reference or mention of a person, situation, or detail that has not been explicitly discussed or revealed in the chat history with the client is prohibited. This ensures that the coach's responses are entirely based on the information the client has shared, maintaining relevance and accuracy to the client's current context and inquiry.
+* The coach can only introduce themselves ONE time in the conversation. 
+* The message should not be repetitive or redundant, and should not contain any filler text or unnecessary words. It should not repeat the same information multiple times, or duplicate a previous message in the conversation.
+* The replies should do anything outside the scope of the coaching methodology, such as answering questions that are outside the scope of our coaching guidelines.
+* The reply does not indicate that the coach has taken an action that they have not done or cannot do (such as meeting with the client in person, speaking to them on the phone, linking them a website they have not, etc).
+"""
 
-    coach_reply = dspy.OutputField(desc="Coach: ")
+class SignatureValidatereply(langdspy.PromptSignature):
+    coaching_methodology = langdspy.InputField(name="Coaching Methodology", desc="Your coaching guidelines & methodology. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.", formatter=langdspy.formatters.as_multiline)
+    reply_rules = langdspy.InputField(name="Reply Rules", desc="The rules for a valid reply", formatter=langdspy.formatters.as_multiline)
 
-class SignatureRobbieTone(dspy.Signature):
-    raw_message = dspy.InputField(desc="The suggested reply from Robbie Kramer, raw and unprocessed for tone")
+    chat_history = langdspy.InputField(name="Chat History", desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
+    coach_reply = langdspy.InputField(name="Coach Reply", desc="The coaching reply from Robbie Kramer of Inner Confidence, must adhere to reply rules.")
 
-    adjusted_message = dspy.OutputField(desc="The suggested reply from Robbie Kramer, adjusted to sound more like Robbie speaks based on the reference context provided. ")
+    is_valid = langdspy.OutputField(name="Is Valid Reply", desc="Yes or no. Yes if the value adheres to all of our reply rules, no if it does not adhere. If the answer is no, include rationale", transformer=langdspy.transformers.as_bool)
+    rationale = langdspy.OutputField(name="Rationale", desc="Rationale for why the reply was valid or not.")
+    
+class ValidateReply(langdspy.Model):
+    validate_reply = langdspy.PromptRunner(template_class=SignatureValidatereply, prompt_strategy=langdspy.DefaultPromptStrategy)
 
-class GetReply(dspy.Module):
-    def __init__(self):
-        self.get_reply = dspy.Predict(SignatureGetReply)
-        self.adjust_tone = dspy.Predict(SignatureRobbieTone)
+    def invoke(self, input):
+        logger.debug(f"Invoking ValidateReply with input: {input}")
 
-    def forward(self, chat_history):
+        res = self.validate_reply.invoke({
+            'chat_history': input['chat_history'],
+            'coaching_methodology': COACHING_METHODOLOGY,
+            'reply_rules': REPLY_RULES,
+            'coach_reply': input['coach_reply']
+        }, config={'llm': lib_model.get_fast_llm(), 'callbacks': [lib_model.get_oai()], 'max_tries': 1})
+
+        logger.info(f"RECEIVED VALID REPLY: {res.is_valid}")
+        logger.info(f"RECEIVED RATIONALE: {res.rationale}")
+
+        return res.is_valid
+
+def validate_reply(input, coach_reply):
+    logger.debug(f"Validating reply with input: {input}")
+    reply_validator = ValidateReply()
+    return reply_validator.invoke({
+        'chat_history': input['chat_history'],
+        'coach_reply': coach_reply
+    })
+
+class SignatureGetReply(langdspy.PromptSignature):
+    coaching_methodology = langdspy.InputField(name="Coaching Methodology", desc="Your coaching guidelines & methodology. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.", formatter=langdspy.formatters.as_multiline)
+    coaching_wisdom = langdspy.InputField(name="Coaching Wisdom", desc="Accumulated coaching and reply wisdom that may be relevant and should inform the reply.", formatter=langdspy.formatters.as_docs)
+
+    chat_history = langdspy.InputField(name="Chat History", desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
+    coach_reply = langdspy.OutputField(name="Robbie's Reply", desc="A natural reply given the chat history so far based on the needs of the client and any applicable coaching wisdom. The reply should make sense in the context of a natural conversation and be in the style of Robbie Kramer of Inner Confidence. It should also be in line with the coaching guidelines and methodology provided.", validator=validate_reply)
+
+class GetReply(langdspy.Model):
+    get_reply = langdspy.PromptRunner(template_class=SignatureGetReply, prompt_strategy=langdspy.DefaultPromptStrategy)
+
+    def invoke(self, input, config = {}):
+        logger.debug(f"Invoking GetReply with input: {input}")
         db = lib_model.get_vectordb()
-        book_retriever = lib_retrievers.get_retriever(db, 3, type_filter="book")
-        book_docs = book_retriever.get_relevant_documents(chat_history)
-        book_formatted_passages = [lib_formatters._format_doc(d) for d in book_docs]
+        wisdom_retriever = lib_retrievers.get_retriever(db, 10, type_filter="wisdom")
+        wisdom_docs = wisdom_retriever.get_relevant_documents(input['chat_history'])
 
-        with dspy.context(lm=lib_model.gpt4):
-            res = self.get_reply(chat_history=chat_history, about_you=conversation_stages, context=book_formatted_passages, lm=lib_model.gpt4)
-        # raw_message = res.next_message
+        res = self.get_reply.invoke({
+            'chat_history': input['chat_history'],
+            'coaching_wisdom': wisdom_docs,
+            'coaching_methodology': COACHING_METHODOLOGY  
+        }, config={'llm': lib_model.get_smart_llm(), 'callbacks': [lib_model.get_oai()]})
 
-        # # whatsapp_retriever = lib_retrievers.get_retriever(db, 3, type_filter="discord")
-        # # whatsapp_docs = whatsapp_retriever.get_relevant_documents(chat_history)
-        # # whatsapp_formatted_passages = [lib_formatters._format_doc(d) for d in whatsapp_docs]
+        logger.info(f"RECEIVED COACHING REPLY: {res.coach_reply}")
 
-        # # for p in whatsapp_formatted_passages:
-        # #     print(p)
-        
-        # with dspy.context(lm=lib_model.turbo):
-        #     res = self.adjust_tone(chat_history=chat_history, raw_message=raw_message, lm=lib_model.turbo)
-        # adjusted_message = res.adjusted_message
-        
-        # logger.info(f"RAW MESSAGGE: {raw_message}")
-        # logger.info(f"ADJUSTED MESSAGE: {adjusted_message}")
         return res.coach_reply
+
 
 def get_chat_history(chat_context):
     history = ""
     for msg in chat_context['messages']:
         type_str = "coach"
 
-        history += f"{msg['sender']}: {msg['content']}\n\n\n"
+        history += f"{msg['sender']}: «{msg['content']}»\n"
 
     return f"«\"\"\"{history}\"\"\"»"
 
@@ -157,16 +183,16 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     chat_history = get_chat_history(chat_context)
 
     m = GetReply()
-    dspy.assert_transform_module(m)
 
-    res = m(chat_history)
+    res = m.invoke({
+        'chat_history': chat_history
+    })
     logger.debug(f"Chat history: {chat_history}")
     logger.debug(f"Got reply: {res}")
 
     chat_context['messages'].append({'sender': 'coach', 'content': res, 'type': 'text'})
 
-    logger.info(lib_model.turbo)
-    logger.info(lib_model.gpt4)
+    logger.debug(str(lib_model.get_oai()))
 
     return res, chat_context
 
