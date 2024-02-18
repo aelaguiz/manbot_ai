@@ -34,12 +34,6 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
     global _smart_llm
     global _json_smart_llm
 
-    global turbo
-    global gpt4
-
-    turbo = dspy.OpenAI(fast_model_name, api_key=api_key, temperature=0.7, max_tokens=1000)
-    gpt4 = dspy.OpenAI(smart_model_name, api_key=api_key, temperature=0.7, max_tokens=1000)
-
     dspy.settings.configure(lm=turbo, trace=[])
     import dsp
     dsp.settings.log_openai_usage = True
@@ -52,7 +46,7 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
         logger.warning("LLM already initialized, skipping")
         return _fast_llm
 
-    _fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp)
+    _fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=3)
     _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30, model='text-embedding-3-small')
     _db = initialize_db(db_connection_string, record_manager_connection_string)
     # set_llm_cache(SQLiteCache(database_path=".langchain.db"))
@@ -63,7 +57,7 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
         }
     )
 
-    _smart_llm = ChatOpenAI(model_name=smart_model_name, temperature=temp)
+    _smart_llm = ChatOpenAI(model_name=smart_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=3)
     _json_smart_llm = ChatOpenAI(model_name=smart_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=0).bind(
         response_format= {
             "type": "json_object"
