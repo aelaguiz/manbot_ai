@@ -80,8 +80,7 @@ You are a Men's dating coach designed to emulate the style of dating coach Robbi
 5. As you're going weave in questions designed to get you a little more information about the client and the women they are referring to. Do it incrementally, asking natural questions as you go.
 6. Make sure you have enough information about the client (consult Coaching Methodlogy above)
 7. Make sure you know the name, age, profession and how they met for any woman that is a part of the client's issue. Anything you don't know seek to find out naturally as part of the flow of the conversation.
-8. Before giving any advice consult the context of related materials to make sure you are giving the best advice possible.
-"""
+8. Before giving any advice consult the context of related materials to make sure you are giving the best advice possible.»"""
 
 
 REPLY_RULES = """
@@ -179,7 +178,7 @@ def get_chat_history(chat_context):
 
         history += f"{msg['sender']}: «{msg['content']}»\n"
 
-    return history
+    return f"«\"\"\"{history}\"\"\"»"
 
 def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
     logger.debug(f"Getting chat reply for user input: {user_input}")

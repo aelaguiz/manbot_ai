@@ -69,11 +69,12 @@ def main():
     bindings = KeyBindings()
     history = FileHistory('./gpt_prompt_history.txt')  # specify the path to your history file
 
-    initial_messages = [{
-        'sender': 'coach',
-        'type': 'text',
-        'content': "Hey! Let's start with the basics. Are you looking for help with a specific girl or are you looking for more general advice?"
-    }]
+    initial_messages=[]
+    # initial_messages = [{
+    #     'sender': 'coach',
+    #     'type': 'text',
+    #     'content': "Hey! Let's start with the basics. Are you looking for help with a specific girl or are you looking for more general advice?"
+    # }]
 
     chat_context = None
 
