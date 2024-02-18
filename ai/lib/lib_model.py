@@ -1,13 +1,12 @@
 import logging
-from langchain.embeddings import OpenAIEmbeddings, OllamaEmbeddings
-from langchain.chat_models import ChatOpenAI, ChatOllama
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.globals import set_llm_cache
 from langchain.indexes import SQLRecordManager, index
 from langchain.cache import SQLiteCache
 from langchain.vectorstores.pgvector import PGVector
 from langchain.cache import SQLiteCache
 from langchain.globals import set_llm_cache
-from langchain.callbacks import OpenAICallbackHandler
+from langchain_community.callbacks import OpenAICallbackHandler
 import httpx
 import dspy
 
