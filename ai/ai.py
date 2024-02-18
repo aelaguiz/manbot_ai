@@ -90,7 +90,6 @@ Your style should be direct, pragmatic, and confident, with a casual tone. Empha
 REPLY_RULES = """
 * The reply must strictly adhere to the content provided in the chat history. Any reference or mention of a person, situation, or detail that has not been explicitly discussed or revealed in the chat history with the client is prohibited. This ensures that the coach's responses are entirely based on the information the client has shared, maintaining relevance and accuracy to the client's current context and inquiry.
 * The coach can only introduce themselves ONE time in the conversation. 
-* The final reply must not contain content that was not present in the draft reply.
 * The message should not be repetitive or redundant, and should not contain any filler text or unnecessary words. It should not repeat the same information multiple times, or duplicate a previous message in the conversation.
 * The replies should do anything outside the scope of the coaching methodology, such as answering questions that are outside the scope of our coaching guidelines.
 * The reply does not indicate that the coach has taken an action that they have not done or cannot do (such as meeting with the client in person, speaking to them on the phone, linking them a website they have not, etc).
@@ -101,8 +100,7 @@ class SignatureValidatereply(langdspy.PromptSignature):
     reply_rules = langdspy.InputField(name="Reply Rules", desc="The rules for a valid reply", formatter=langdspy.formatters.as_multiline)
 
     chat_history = langdspy.InputField(name="Chat History", desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
-    draft_reply = langdspy.InputField(name="Draft Coach Reply", desc="The reply from Robbie Kramer of Inner Confidence, must adhere to reply rule sand coaching methodology.")
-    coach_reply = langdspy.InputField(name="Final Coach Reply", desc="The final reply from Robbie Kramer of Inner Confidence, must adhere to reply rules and contain the same content as the draft reply.")
+    coach_reply = langdspy.InputField(name="Coach Reply", desc="The coaching reply from Robbie Kramer of Inner Confidence, must adhere to reply rules.")
 
     is_valid = langdspy.OutputField(name="Is Valid Reply", desc="Yes or no. Yes if the value adheres to all of our reply rules, no if it does not adhere. If the answer is no, include rationale", transformer=langdspy.transformers.as_bool)
     rationale = langdspy.OutputField(name="Rationale", desc="Rationale for why the reply was valid or not.")
@@ -115,7 +113,6 @@ class ValidateReply(langdspy.Model):
 
         res = self.validate_reply.invoke({
             'chat_history': input['chat_history'],
-            'draft_reply': input['draft_reply'],
             'coaching_methodology': COACHING_METHODOLOGY,
             'reply_rules': REPLY_RULES,
             'coach_reply': input['coach_reply']
@@ -126,13 +123,12 @@ class ValidateReply(langdspy.Model):
 
         return res.is_valid
 
-def validate_reply(input, final_reply):
+def validate_reply(input, coach_reply):
     logger.debug(f"Validating reply with input: {input}")
     reply_validator = ValidateReply()
     return reply_validator.invoke({
         'chat_history': input['chat_history'],
-        'draft_reply': input['draft_reply'],
-        'coach_reply': final_reply
+        'coach_reply': coach_reply
     })
 
 class SignatureGetReply(langdspy.PromptSignature):
@@ -140,19 +136,10 @@ class SignatureGetReply(langdspy.PromptSignature):
     coaching_wisdom = langdspy.InputField(name="Coaching Wisdom", desc="Accumulated coaching and reply wisdom that may be relevant and should inform the reply.", formatter=langdspy.formatters.as_docs)
 
     chat_history = langdspy.InputField(name="Chat History", desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
-    coach_reply = langdspy.OutputField(name="Robbie's Reply", desc="A natural reply given the chat history so far based on the needs of the client and any applicable coaching wisdom. The reply should make sense in the context of a natural conversation and be in the style of Robbie Kramer of Inner Confidence. It should also be in line with the coaching guidelines and methodology provided.")
-
-class SignatureRobbieTone(langdspy.PromptSignature):
-    chat_history = langdspy.InputField(name="Chat History", desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
-    robbie_examples = langdspy.InputField(name="Robbie Examples", desc="Examples of how Robbie speaks to clients.", formatter=langdspy.formatters.as_docs)
-    reply_rules = langdspy.InputField(name="Reply Rules", desc="The rules for a valid reply.", formatter=langdspy.formatters.as_multiline)
-    draft_reply = langdspy.InputField(name="Draft Coach Reply", desc="The draft reply from Robbie Kramer, raw and unprocessed for tone.")
-    final_reply = langdspy.OutputField(name="Final Coach Reply", desc="The final reply from Robbie Kramer, edited to sound more like Robbie's style of conversation and tone as exemplified by Robbie Examples. The final reply should not introduce additional questions, information or other content it should only be the draft edited for tone and style.", validator=validate_reply)
-
+    coach_reply = langdspy.OutputField(name="Robbie's Reply", desc="A natural reply given the chat history so far based on the needs of the client and any applicable coaching wisdom. The reply should make sense in the context of a natural conversation and be in the style of Robbie Kramer of Inner Confidence. It should also be in line with the coaching guidelines and methodology provided.", validator=validate_reply)
 
 class GetReply(langdspy.Model):
     get_reply = langdspy.PromptRunner(template_class=SignatureGetReply, prompt_strategy=langdspy.DefaultPromptStrategy)
-    adjust_tone = langdspy.PromptRunner(template_class=SignatureRobbieTone, prompt_strategy=langdspy.DefaultPromptStrategy)
 
     def invoke(self, input, config = {}):
         logger.debug(f"Invoking GetReply with input: {input}")
@@ -164,23 +151,11 @@ class GetReply(langdspy.Model):
             'chat_history': input['chat_history'],
             'coaching_wisdom': wisdom_docs,
             'coaching_methodology': COACHING_METHODOLOGY  
-        }, config={'llm': lib_model.get_fast_llm(), 'callbacks': [lib_model.get_oai()]})
+        }, config={'llm': lib_model.get_smart_llm(), 'callbacks': [lib_model.get_oai()]})
 
-        logger.info(f"RECEIVED DRAFT REPLY: {res.coach_reply}")
+        logger.info(f"RECEIVED COACHING REPLY: {res.coach_reply}")
 
-        whatsapp_retriever = lib_retrievers.get_retriever(db, 2, type_filter="whatsapp_chat")
-        whatsapp_docs = whatsapp_retriever.get_relevant_documents(input['chat_history'])
-
-        tone_res = self.adjust_tone.invoke({
-            'chat_history': input['chat_history'],
-            'reply_rules': REPLY_RULES,
-            'robbie_examples': whatsapp_docs,
-            'draft_reply': res.coach_reply,
-        }, config={'llm': lib_model.get_fast_llm(), 'callbacks': [lib_model.get_oai()]}) 
-
-        logger.info(f"FINAL REPLY: {tone_res.final_reply}")
-
-        return tone_res.final_reply
+        return res.coach_reply
 
 
 def get_chat_history(chat_context):
