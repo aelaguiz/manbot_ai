@@ -14,6 +14,7 @@ _vectordb = None
 _embedding = None
 _pinecone_index = None
 _fast_llm = None
+_image_llm = None
 _json_fast_llm = None
 _smart_llm = None
 _json_smart_llm = None
@@ -24,8 +25,9 @@ _oai = OpenAICallbackHandler()
 
 turbo = gpt4 = None
 
-def init(smart_model_name, fast_model_name, api_key, db_connection_string, record_manager_connection_string, temp=0.5):
+def init(image_model_name, smart_model_name, fast_model_name, api_key, db_connection_string, record_manager_connection_string, max_tokens, image_max_tokens, temp=0.5):
     global _fast_llm
+    global _image_llm
     global _json_fast_llm
     global _embedding
     global _db
@@ -45,23 +47,25 @@ def init(smart_model_name, fast_model_name, api_key, db_connection_string, recor
         logger.warning("LLM already initialized, skipping")
         return _fast_llm
 
-    _fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=3)
+    _fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=3, max_tokens=max_tokens)
     _embedding = OpenAIEmbeddings(openai_api_key=api_key, timeout=30, model='text-embedding-3-small')
     _db = initialize_db(db_connection_string, record_manager_connection_string)
     # set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 
-    _json_fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=0).bind(
+    _json_fast_llm = ChatOpenAI(model_name=fast_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=0, max_tokens=max_tokens).bind(
         response_format= {
             "type": "json_object"
         }
     )
 
-    _smart_llm = ChatOpenAI(model_name=smart_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=3)
-    _json_smart_llm = ChatOpenAI(model_name=smart_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=0).bind(
+    _smart_llm = ChatOpenAI(model_name=smart_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=3, max_tokens=max_tokens)
+    _json_smart_llm = ChatOpenAI(model_name=smart_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=0, max_tokens=max_tokens).bind(
         response_format= {
             "type": "json_object"
         }
     )
+
+    _image_llm = ChatOpenAI(model_name=image_model_name, temperature=temp, timeout=httpx.Timeout(15.0, read=60.0, write=10.0, connect=3.0), max_retries=3, max_tokens=image_max_tokens)
 
 def get_oai():
     return _oai
@@ -74,6 +78,17 @@ def get_embedding_fn():
         raise Exception("Embedding not initialized, call init() first")
     
     return _embedding
+
+def get_image_llm():
+    global _image_llm
+
+    logger = logging.getLogger(__name__)
+
+    if not _image_llm:
+        logger.error("Image LLM not initialized, call init() first")
+        raise Exception("Image LLM not initialized, call init() first")
+
+    return _image_llm
 
 def get_smart_llm():
     global _smart_llm

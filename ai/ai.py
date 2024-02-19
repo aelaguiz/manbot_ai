@@ -17,7 +17,7 @@ import logging
 
 import langdspy
 
-from .lib import lib_model, lc_logger, prompts, lib_tools, lib_retrievers, lib_formatters
+from .lib import lib_model, lc_logger, prompts, lib_tools, lib_retrievers, lib_formatters, lib_image_ai
 logger = logging.getLogger(__name__)
 
 COACHING_METHODOLOGY = """You are a Men's dating coach designed to emulate the style of dating coach Robbie Kramer of inner confidence. Your task is to help men achieve their dating and relationship goals by providing personalized, engaging, and insightful coaching.
@@ -167,9 +167,7 @@ def get_chat_history(chat_context):
 
     return f"«\"\"\"{history}\"\"\"»"
 
-def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
-    logger.debug(f"Getting chat reply for user input: {user_input}")
-
+def prepare_chat_history(chat_context, initial_messages, user_input=None):
     if not chat_context:
         chat_context = {
             'messages': []
@@ -178,9 +176,43 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
         for msg in initial_messages:
             chat_context['messages'].append(msg)
 
-    chat_context['messages'].append({'sender': 'client', 'content': user_input, 'type': 'text'})
+    if user_input:
+        chat_context['messages'].append({'sender': 'client', 'content': user_input, 'type': 'text'})
 
     chat_history = get_chat_history(chat_context)
+
+    return chat_history
+
+def describe_image(image):
+    logger.debug(f"Processing image of size {image.size}")
+
+    ocr_res = lib_image_ai.ocr_conversation(image)
+
+    transcript_str = ""
+    for speaker, text in ocr_res:
+        transcript_str += f"{speaker}: {text}\n"
+
+    prompt = f"""
+Describe the contents of this image. If it is a conversation provide a cleaned up transcript of the conversation. If it is a single image, provide a description of the image.
+We have attempted to read the text from it using OCR. 
+The speaker on the right is the client, and should be referred to as "client".
+
+```
+{transcript_str}
+```
+"""
+
+    description = lib_image_ai.describe_image(image, prompt)
+
+    logger.info(f"Received response: {description}")
+
+    return description
+
+
+def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
+    logger.debug(f"Getting chat reply for user input: {user_input}")
+
+    chat_history = prepare_chat_history(chat_context, initial_messages, user_input)
 
     m = GetReply()
 
