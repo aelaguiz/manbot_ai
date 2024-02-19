@@ -18,6 +18,7 @@ import logging
 import langdspy
 
 from .lib import lib_model, lc_logger, prompts, lib_tools, lib_retrievers, lib_formatters, lib_image_ai
+from .lib.types import ChatMessage
 logger = logging.getLogger(__name__)
 
 COACHING_METHODOLOGY = """You are a Men's dating coach designed to emulate the style of dating coach Robbie Kramer of inner confidence. Your task is to help men achieve their dating and relationship goals by providing personalized, engaging, and insightful coaching.
@@ -145,7 +146,7 @@ class GetReply(langdspy.Model):
         logger.debug(f"Invoking GetReply with input: {input}")
         db = lib_model.get_vectordb()
         wisdom_retriever = lib_retrievers.get_retriever(db, 10, type_filter="wisdom")
-        wisdom_docs = wisdom_retriever.get_relevant_documents(input['chat_history'])
+        wisdom_docs = wisdom_retriever.get_relevant_documents(ChatMessage.format_list_as_str(input['chat_history']))
 
         res = self.get_reply.invoke({
             'chat_history': input['chat_history'],
@@ -209,10 +210,8 @@ The speaker on the right is the client, and should be referred to as "client".
     return description
 
 
-def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_messages=None):
-    logger.debug(f"Getting chat reply for user input: {user_input}")
-
-    chat_history = prepare_chat_history(chat_context, initial_messages, user_input)
+def get_chat_reply(session_id, chat_id, chat_history, chat_context=None, initial_messages=None):
+    logger.debug(f"Getting chat reply for chat_history: {chat_history} and chat_context: {chat_context}")
 
     m = GetReply()
 
@@ -222,14 +221,8 @@ def get_chat_reply(user_input, session_id, chat_id, chat_context=None, initial_m
     logger.debug(f"Chat history: {chat_history}")
     logger.debug(f"Got reply: {res}")
 
-    chat_context['messages'].append({'sender': 'coach', 'content': res, 'type': 'text'})
-
     logger.debug(str(lib_model.get_oai()))
 
-    return res, chat_context
+    msg = ChatMessage(sender="coach", content=res, msg_type="text")
 
-    # from ai.lib.dspy.dspy_pgvector_retriever import PGVectorRM
-
-
-
-    # return res, new_chat_context
+    return [msg], chat_context

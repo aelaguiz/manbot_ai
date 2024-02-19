@@ -85,34 +85,41 @@ init(os.getenv("IMAGE_OPENAI_MODEL"), os.getenv("SMART_OPENAI_MODEL"), os.getenv
 # image = download_image(image_url, os.getenv("IMAGE_USERNAME"), os.getenv("IMAGE_PASSWORD"))
 
 from ai.lib import lib_image_ai
+from ai import ChatMessage
 # image_data = base64.b64decode(base64_image)
 
 
 
 # # https://api.twilio.com/2010-04-01/Accounts/AC7278c4ac3f5c1ae283833f4b167b3f65/Messages/MM9ee3dab948f1b43a754cbf8f00c1908e/Media/ME715240f2a6dacce533af4bbf2132b0dc
-def process_image(image_url, chat_context, initial_messages):
-    lib_conversation.save_message(f"Image: {image_url}", "human")
-
+def process_image(image_url, chat_history, chat_context):
     image = download_image(image_url, os.getenv("IMAGE_USERNAME"), os.getenv("IMAGE_PASSWORD"))
     print(f"Downloaded image of length: {image.size}")
 
     image_description = ai.describe_image(image)
 
     # res = convo.predict(input=user_input)
-    print(f"\nai: {image_description}\n")
-    lib_conversation.save_message(image_description, "ai")
+    # print(f"\nai: {image_description}\n")
+    # lib_conversation.save_message(image_description, "ai")
 
-    return image_description
+    msg = ChatMessage(sender="client", content=f"Uploaded image", msg_type="image", image_description=image_description)
+    lib_conversation.save_message(msg.content, msg.sender)
+    chat_history.append(msg)
 
-def process_command(user_input, chat_context, initial_messages):
+def process_command(user_input, chat_history, chat_context):
     # print(f"Asking AI about: {user_input}")
-    lib_conversation.save_message(user_input, "human")
 
-    reply, new_context = ai.get_chat_reply(user_input, session_id="test", chat_id="test", chat_context=chat_context, initial_messages=initial_messages)
+    msg = ChatMessage(sender="client", content=user_input, msg_type="text")
+    lib_conversation.save_message(msg.content, msg.sender)
+    chat_history.append(msg)
 
-    # res = convo.predict(input=user_input)
-    print(f"\nai: {reply}\n")
-    lib_conversation.save_message(reply, "ai")
+    reply_list, new_context = ai.get_chat_reply(session_id="test", chat_id="test", chat_history=chat_history, chat_context=chat_context)
+
+    chat_history.extend(reply_list)
+
+    for msg in reply_list:
+        # res = convo.predict(input=user_input)
+        print(f"\n{msg.sender}: {msg.content}\n")
+        lib_conversation.save_message(msg.content, msg.sender)
 
     return new_context
 
@@ -123,18 +130,8 @@ def main():
     bindings = KeyBindings()
     history = FileHistory('./gpt_prompt_history.txt')  # specify the path to your history file
 
-    initial_messages=[]
-    # initial_messages = [{
-    #     'sender': 'coach',
-    #     'type': 'text',
-    #     'content': "Hey! Let's start with the basics. Are you looking for help with a specific girl or are you looking for more general advice?"
-    # }]
-
+    chat_history = []
     chat_context = None
-
-    for msg in initial_messages:
-        print(f"{msg['sender']}: {msg['content']}\n")
-        lib_conversation.save_message(msg['content'], msg['type'])
 
     while True:
         multiline = False
@@ -154,16 +151,16 @@ def main():
                         # image_url = "https://api.twilio.com/2010-04-01/Accounts/AC7278c4ac3f5c1ae283833f4b167b3f65/Messages/MM9ee3dab948f1b43a754cbf8f00c1908e/Media/ME715240f2a6dacce533af4bbf2132b0dc"
                         # Chat convo
                         image_url = "https://api.twilio.com/2010-04-01/Accounts/AC7278c4ac3f5c1ae283833f4b167b3f65/Messages/MMa87d68aed7ff1b094e7a7f0f966ab857/Media/ME1d2f0bc2d8c0f945f0ffe2029ad7d1e8"
-                        process_image(image_url, chat_context, initial_messages)
+                        process_image(image_url, chat_history, chat_context)
                         break
                     elif line.strip().lower() == 'quit':
                         return  # Exit the CLI
                     else:
-                        chat_context = process_command(line, chat_context, initial_messages)
+                        chat_context = process_command(line, chat_history, chat_context)
                 else:
                     # Multiline input mode
                     line = prompt('... ', multiline=True, key_bindings=bindings, history=history)
-                    chat_context = process_command(line, chat_context, initial_messages)
+                    chat_context = process_command(line, chat_history, chat_context)
                     multiline = False
             except EOFError:
                 return

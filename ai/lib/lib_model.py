@@ -8,7 +8,6 @@ from langchain.cache import SQLiteCache
 from langchain.globals import set_llm_cache
 from langchain_community.callbacks import OpenAICallbackHandler
 import httpx
-import dspy
 
 _vectordb = None
 _embedding = None
@@ -34,10 +33,6 @@ def init(image_model_name, smart_model_name, fast_model_name, api_key, db_connec
     global _record_manager
     global _smart_llm
     global _json_smart_llm
-
-    dspy.settings.configure(lm=turbo, trace=[])
-    import dsp
-    dsp.settings.log_openai_usage = True
 
 
     logger = logging.getLogger(__name__)

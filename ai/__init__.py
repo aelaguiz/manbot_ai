@@ -9,3 +9,5 @@ def init(image_model_name, smart_model_name, fast_model_name, api_key, db_connec
 
 # __all__ = [get_chat_reply, ChatError, init, __version__]
 # __all__ = [__version__]
+
+from .lib.types import ChatMessage
