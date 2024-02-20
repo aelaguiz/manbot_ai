@@ -22,3 +22,18 @@ class ChatMessage(BaseModel):
         if v and (not values.get('image_user') or not values.get('image_password')):
             raise ValueError('image_user and image_password must be provided with an image_url')
         return v
+
+        
+    def __str__(self):
+        return f"{self.sender}: {self.content}"
+
+    # Custom JSON encoder for datetime
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+        }
+
+
+    @classmethod
+    def format_list_as_str(cls, chat_history: List['ChatMessage']):
+        return "\n".join([f"{msg.sender}: {msg.content}" for msg in chat_history])

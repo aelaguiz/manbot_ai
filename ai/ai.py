@@ -132,11 +132,12 @@ def validate_reply(input, coach_reply):
         'coach_reply': coach_reply
     })
 
+    
 class SignatureGetReply(langdspy.PromptSignature):
     coaching_methodology = langdspy.InputField(name="Coaching Methodology", desc="Your coaching guidelines & methodology. This can be used to help Robbie Kramer of Inner Confidence understand and reply to the client.", formatter=langdspy.formatters.as_multiline)
     coaching_wisdom = langdspy.InputField(name="Coaching Wisdom", desc="Accumulated coaching and reply wisdom that may be relevant and should inform the reply.", formatter=langdspy.formatters.as_docs)
 
-    chat_history = langdspy.InputField(name="Chat History", desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.")
+    chat_history = langdspy.InputField(name="Chat History", desc="Chat history between the client and men's dating coach Robbie Kramer of the Inner Confidence Podcast.", formatter=langdspy.formatters.as_list)
     coach_reply = langdspy.OutputField(name="Robbie's Reply", desc="A natural reply given the chat history so far based on the needs of the client and any applicable coaching wisdom. The reply should make sense in the context of a natural conversation and be in the style of Robbie Kramer of Inner Confidence. It should also be in line with the coaching guidelines and methodology provided.", validator=validate_reply)
 
 class GetReply(langdspy.Model):
